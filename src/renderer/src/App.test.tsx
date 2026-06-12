@@ -16,9 +16,10 @@ describe('App shell', () => {
 
   it('renders all three track names', () => {
     render(<App />)
-    expect(screen.getByText('DC Circuits')).toBeInTheDocument()
-    expect(screen.getByText('AC & Residential')).toBeInTheDocument()
-    expect(screen.getByText('Digital Computing')).toBeInTheDocument()
+    // Track names can appear in both the sidebar and the breadcrumb
+    expect(screen.getAllByText('DC Circuits').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('AC & Residential').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Digital Computing').length).toBeGreaterThan(0)
   })
 
   it('toggles dark mode when the theme button is clicked', async () => {
