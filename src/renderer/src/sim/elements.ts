@@ -17,6 +17,7 @@ export type ComponentType =
   | 'voltage_source' | 'current_source'
   | 'diode' | 'led' | 'transistor_npn'
   | 'switch' | 'ground' | 'wire_node'
+  | 'voltmeter' | 'ammeter'
 
 export interface CircuitComponent {
   id: string
@@ -134,6 +135,24 @@ export const ELEMENTS: Record<ComponentType, ElementDef> = {
     displayName: 'Ground',
     labelPrefix: 'GND',
     terminals: [{ x: 0, y: -GRID }],
+    defaultValue: null,
+    unit: '',
+    inPalette: true
+  },
+  voltmeter: {
+    type: 'voltmeter',
+    displayName: 'Voltmeter',
+    labelPrefix: 'VM',
+    terminals: [{ x: -2 * GRID, y: 0, name: '+' }, { x: 2 * GRID, y: 0, name: '−' }],
+    defaultValue: null,
+    unit: '',
+    inPalette: true
+  },
+  ammeter: {
+    type: 'ammeter',
+    displayName: 'Ammeter',
+    labelPrefix: 'AM',
+    terminals: [{ x: -2 * GRID, y: 0 }, { x: 2 * GRID, y: 0 }],
     defaultValue: null,
     unit: '',
     inPalette: true

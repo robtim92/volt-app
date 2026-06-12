@@ -5,6 +5,7 @@
  *   - Click a palette item, then click the canvas to place (ghost preview).
  *   - Drag from terminal to terminal to wire.
  *   - Drag a component body to move it (grid-snapped).
+ *   - Mouse wheel zooms (about the cursor); middle-drag or Alt+drag pans.
  *   - Double-click a switch to toggle it. Right-click a wire to delete it.
  *   - R rotates the selection, Delete removes it, Escape cancels.
  *
@@ -30,6 +31,8 @@ import { terminalKey } from '../../sim/netlist'
 interface CircuitCanvasProps {
   pendingType: ComponentType | null
   onPlaced: () => void
+  /** Receives the underlying canvas element (for PNG export). */
+  canvasElRef?: React.MutableRefObject<HTMLCanvasElement | null>
 }
 
 interface TerminalHit {
@@ -42,6 +45,8 @@ interface TerminalHit {
 const TERMINAL_RADIUS = 5
 const TERMINAL_HIT_RADIUS = 9
 const COMPONENT_HIT_RADIUS = 2 * GRID
+const MIN_ZOOM = 0.4
+const MAX_ZOOM = 2.5
 
 // ── Color helpers ────────────────────────────────────────────────────────────
 
@@ -132,7 +137,6 @@ function drawSymbol(
       ctx.moveTo(6, 0);  ctx.lineTo(E, 0)
       ctx.moveTo(-6, -14); ctx.lineTo(-6, 14)   // long plate = +
       ctx.moveTo(6, -7);   ctx.lineTo(6, 7)     // short plate = −
-      // plus sign near the positive terminal
       ctx.moveTo(-20, -14); ctx.lineTo(-12, -14)
       ctx.moveTo(-16, -18); ctx.lineTo(-16, -10)
       ctx.stroke()
@@ -143,11 +147,24 @@ function drawSymbol(
       ctx.moveTo(16, 0); ctx.lineTo(E, 0)
       ctx.moveTo(16, 0)
       ctx.arc(0, 0, 16, 0, Math.PI * 2)
-      // arrow pointing toward terminal 0 (current exits there)
       ctx.moveTo(8, 0); ctx.lineTo(-8, 0)
       ctx.moveTo(-8, 0); ctx.lineTo(-2, -5)
       ctx.moveTo(-8, 0); ctx.lineTo(-2, 5)
       ctx.stroke()
+      break
+    }
+    case 'voltmeter':
+    case 'ammeter': {
+      ctx.moveTo(-E, 0); ctx.lineTo(-16, 0)
+      ctx.moveTo(16, 0); ctx.lineTo(E, 0)
+      ctx.moveTo(16, 0)
+      ctx.arc(0, 0, 16, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.font = 'bold 14px Inter, system-ui, sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(comp.type === 'voltmeter' ? 'V' : 'A', 0, 1)
+      ctx.textBaseline = 'alphabetic'
       break
     }
     case 'diode':
@@ -170,7 +187,7 @@ function drawSymbol(
           ctx.fill()
           ctx.restore()
         }
-        ctx.beginPath()                          // emission arrows
+        ctx.beginPath()
         ctx.moveTo(2, -12); ctx.lineTo(10, -20)
         ctx.moveTo(10, -20); ctx.lineTo(5, -19)
         ctx.moveTo(10, -20); ctx.lineTo(9, -15)
@@ -195,7 +212,6 @@ function drawSymbol(
       break
     }
     case 'ground': {
-      // terminal at (0, -GRID); stem down to the bars
       ctx.moveTo(0, -GRID); ctx.lineTo(0, 2)
       ctx.moveTo(-12, 2); ctx.lineTo(12, 2)
       ctx.moveTo(-8, 8);  ctx.lineTo(8, 8)
@@ -209,7 +225,6 @@ function drawSymbol(
       break
     }
     default: {
-      // unsupported types render as a box
       ctx.strokeRect(-16, -16, 32, 32)
     }
   }
@@ -219,16 +234,31 @@ function drawSymbol(
 
 export default function CircuitCanvas({
   pendingType,
-  onPlaced
+  onPlaced,
+  canvasElRef
 }: CircuitCanvasProps): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const mouseRef = useRef({ x: -1000, y: -1000, inside: false })
-  const dragRef = useRef<{ id: string; dx: number; dy: number; moved: boolean } | null>(null)
+  // mouse position in WORLD coordinates
+  const mouseRef = useRef({ x: -10000, y: -10000, inside: false })
+  const dragRef = useRef<{ id: string; dx: number; dy: number } | null>(null)
+  const panRef = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null)
   const wireStartRef = useRef<TerminalHit | null>(null)
+  const viewRef = useRef({ ox: 0, oy: 0, scale: 1 })
   const pendingRef = useRef<ComponentType | null>(pendingType)
   pendingRef.current = pendingType
 
-  // ── Hit testing against current store state ──
+  // ── Coordinate transforms ──
+  const screenToWorld = (sx: number, sy: number): { x: number; y: number } => {
+    const v = viewRef.current
+    return { x: (sx - v.ox) / v.scale, y: (sy - v.oy) / v.scale }
+  }
+
+  const canvasPoint = (e: { clientX: number; clientY: number }): { x: number; y: number } => {
+    const rect = canvasRef.current!.getBoundingClientRect()
+    return screenToWorld(e.clientX - rect.left, e.clientY - rect.top)
+  }
+
+  // ── Hit testing against current store state (world coords) ──
   const findTerminal = (x: number, y: number): TerminalHit | null => {
     const { components } = useCircuitStore.getState()
     for (let i = components.length - 1; i >= 0; i--) {
@@ -268,14 +298,22 @@ export default function CircuitCanvas({
     return null
   }
 
-  const canvasPoint = (e: { clientX: number; clientY: number }): { x: number; y: number } => {
-    const rect = canvasRef.current!.getBoundingClientRect()
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top }
-  }
-
   // ── Mouse interaction ──
   const handleMouseDown = (e: React.MouseEvent): void => {
+    // middle button or Alt+left → pan
+    if (e.button === 1 || (e.button === 0 && e.altKey)) {
+      const rect = canvasRef.current!.getBoundingClientRect()
+      panRef.current = {
+        startX: e.clientX - rect.left,
+        startY: e.clientY - rect.top,
+        ox: viewRef.current.ox,
+        oy: viewRef.current.oy
+      }
+      e.preventDefault()
+      return
+    }
     if (e.button !== 0) return
+
     const { x, y } = canvasPoint(e)
     const store = useCircuitStore.getState()
 
@@ -307,7 +345,7 @@ export default function CircuitCanvas({
     const comp = findComponent(x, y)
     if (comp) {
       store.selectComponent(comp.id)
-      dragRef.current = { id: comp.id, dx: comp.x - x, dy: comp.y - y, moved: false }
+      dragRef.current = { id: comp.id, dx: comp.x - x, dy: comp.y - y }
       return
     }
 
@@ -315,12 +353,19 @@ export default function CircuitCanvas({
   }
 
   const handleMouseMove = (e: React.MouseEvent): void => {
+    const pan = panRef.current
+    if (pan) {
+      const rect = canvasRef.current!.getBoundingClientRect()
+      viewRef.current.ox = pan.ox + (e.clientX - rect.left - pan.startX)
+      viewRef.current.oy = pan.oy + (e.clientY - rect.top - pan.startY)
+      return
+    }
+
     const { x, y } = canvasPoint(e)
     mouseRef.current = { x, y, inside: true }
 
     const drag = dragRef.current
     if (drag) {
-      drag.moved = true
       useCircuitStore
         .getState()
         .updateComponent(drag.id, { x: snapToGrid(x + drag.dx), y: snapToGrid(y + drag.dy) })
@@ -328,6 +373,10 @@ export default function CircuitCanvas({
   }
 
   const handleMouseUp = (e: React.MouseEvent): void => {
+    if (panRef.current) {
+      panRef.current = null
+      return
+    }
     const { x, y } = canvasPoint(e)
     const start = wireStartRef.current
     if (start) {
@@ -359,6 +408,29 @@ export default function CircuitCanvas({
     if (wire) useCircuitStore.getState().removeWire(wire.id)
   }
 
+  // ── Wheel zoom (native listener so preventDefault works) ──
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const onWheel = (e: WheelEvent): void => {
+      e.preventDefault()
+      const rect = canvas.getBoundingClientRect()
+      const sx = e.clientX - rect.left
+      const sy = e.clientY - rect.top
+      const v = viewRef.current
+      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1
+      const newScale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, v.scale * factor))
+      // keep the world point under the cursor fixed
+      const wx = (sx - v.ox) / v.scale
+      const wy = (sy - v.oy) / v.scale
+      v.scale = newScale
+      v.ox = sx - wx * newScale
+      v.oy = sy - wy * newScale
+    }
+    canvas.addEventListener('wheel', onWheel, { passive: false })
+    return () => canvas.removeEventListener('wheel', onWheel)
+  }, [])
+
   // ── Keyboard ──
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -376,6 +448,8 @@ export default function CircuitCanvas({
         if (comp) store.updateComponent(selected, { rotation: (comp.rotation + 90) % 360 })
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && selected) {
         store.removeComponent(selected)
+      } else if (e.key === '0') {
+        viewRef.current = { ox: 0, oy: 0, scale: 1 } // reset view
       }
     }
     window.addEventListener('keydown', onKey)
@@ -386,6 +460,7 @@ export default function CircuitCanvas({
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
+    if (canvasElRef) canvasElRef.current = canvas
     const ctx = canvas.getContext('2d')
     if (!ctx) return // jsdom / test environment
 
@@ -408,7 +483,7 @@ export default function CircuitCanvas({
       const dpr = window.devicePixelRatio || 1
       const w = canvas.width / dpr
       const h = canvas.height / dpr
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      const view = viewRef.current
 
       const dark = useUIStore.getState().darkMode
       const { components, wires, simResult, selectedComponentId } =
@@ -419,15 +494,29 @@ export default function CircuitCanvas({
       const gridColor = dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)'
       const inkNeutral = dark ? '#cbd5e1' : '#334155'
       const labelColor = dark ? '#94a3b8' : '#64748b'
+      const readoutColor = dark ? '#E8B500' : '#b45309'
 
+      // clear in screen space
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       ctx.fillStyle = bg
       ctx.fillRect(0, 0, w, h)
 
+      // world transform
+      ctx.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.ox, dpr * view.oy)
+
+      // visible world bounds
+      const worldLeft = -view.ox / view.scale
+      const worldTop = -view.oy / view.scale
+      const worldRight = (w - view.ox) / view.scale
+      const worldBottom = (h - view.oy) / view.scale
+
       // grid dots
       ctx.fillStyle = gridColor
-      for (let gx = GRID; gx < w; gx += GRID) {
-        for (let gy = GRID; gy < h; gy += GRID) {
-          ctx.fillRect(gx - 0.5, gy - 0.5, 1.5, 1.5)
+      const startX = Math.floor(worldLeft / GRID) * GRID
+      const startY = Math.floor(worldTop / GRID) * GRID
+      for (let gx = startX; gx < worldRight; gx += GRID) {
+        for (let gy = startY; gy < worldBottom; gy += GRID) {
+          ctx.fillRect(gx - 0.75, gy - 0.75, 1.5, 1.5)
         }
       }
 
@@ -455,8 +544,7 @@ export default function CircuitCanvas({
         const b = terminalPosition(to, wire.toTerminal)
 
         const v = nodeVoltageAt(wire.fromComponentId, wire.fromTerminal)
-        ctx.strokeStyle =
-          v !== null ? voltageColor(v, maxV, inkNeutral) : inkNeutral
+        ctx.strokeStyle = v !== null ? voltageColor(v, maxV, inkNeutral) : inkNeutral
         ctx.lineWidth = 2.5
         ctx.setLineDash([])
         ctx.beginPath()
@@ -464,11 +552,10 @@ export default function CircuitCanvas({
         ctx.lineTo(b.x, b.y)
         ctx.stroke()
 
-        // animated current flow
         if (solved) {
           const i = wireCurrent(wire, simResult!)
           if (i !== null && Math.abs(i) > maxI * 1e-4 && Math.abs(i) > 1e-12) {
-            const speed = 14 + 40 * Math.min(1, Math.abs(i) / maxI) // px/s
+            const speed = 14 + 40 * Math.min(1, Math.abs(i) / maxI)
             const offset = ((time / 1000) * speed) % 12
             ctx.strokeStyle = dark ? 'rgba(232,181,0,0.9)' : 'rgba(202,138,4,0.9)'
             ctx.lineWidth = 2.5
@@ -509,7 +596,6 @@ export default function CircuitCanvas({
         drawSymbol(ctx, comp, inkNeutral, lit)
         ctx.restore()
 
-        // selection highlight
         if (comp.id === selectedComponentId) {
           ctx.strokeStyle = '#E8B500'
           ctx.lineWidth = 1.5
@@ -530,6 +616,24 @@ export default function CircuitCanvas({
         if (comp.value !== undefined && def.defaultValue !== null) {
           ctx.fillStyle = labelColor
           ctx.fillText(formatValue(comp.value, def.unit), comp.x, comp.y + 34)
+        }
+
+        // live meter readouts
+        if (solved && (comp.type === 'voltmeter' || comp.type === 'ammeter')) {
+          let reading: string | null = null
+          if (comp.type === 'voltmeter') {
+            const v0 = nodeVoltageAt(comp.id, 0)
+            const v1 = nodeVoltageAt(comp.id, 1)
+            if (v0 !== null && v1 !== null) reading = formatValue(v0 - v1, 'V')
+          } else {
+            const i = simResult!.elementCurrents[comp.id]
+            if (i !== undefined) reading = formatValue(Math.abs(i), 'A')
+          }
+          if (reading !== null) {
+            ctx.font = 'bold 12px JetBrains Mono, monospace'
+            ctx.fillStyle = readoutColor
+            ctx.fillText(reading, comp.x, comp.y + 34)
+          }
         }
 
         // terminals
@@ -562,13 +666,17 @@ export default function CircuitCanvas({
         ctx.save()
         ctx.globalAlpha = 0.45
         ctx.translate(snapToGrid(mouseRef.current.x), snapToGrid(mouseRef.current.y))
-        drawSymbol(
-          ctx,
-          { id: 'ghost', type, x: 0, y: 0, rotation: 0 },
-          '#E8B500',
-          false
-        )
+        drawSymbol(ctx, { id: 'ghost', type, x: 0, y: 0, rotation: 0 }, '#E8B500', false)
         ctx.restore()
+      }
+
+      // zoom indicator (screen space)
+      if (Math.abs(view.scale - 1) > 0.01) {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+        ctx.font = '11px Inter, system-ui, sans-serif'
+        ctx.fillStyle = labelColor
+        ctx.textAlign = 'right'
+        ctx.fillText(`${Math.round(view.scale * 100)}% (press 0 to reset)`, w - 10, h - 10)
       }
 
       raf = requestAnimationFrame(draw)
@@ -579,8 +687,9 @@ export default function CircuitCanvas({
       disposed = true
       cancelAnimationFrame(raf)
       observer?.disconnect()
+      if (canvasElRef) canvasElRef.current = null
     }
-  }, [])
+  }, [canvasElRef])
 
   return (
     <canvas
@@ -593,6 +702,7 @@ export default function CircuitCanvas({
       onMouseLeave={() => {
         mouseRef.current.inside = false
         dragRef.current = null
+        panRef.current = null
       }}
       onDoubleClick={handleDoubleClick}
       onContextMenu={handleContextMenu}

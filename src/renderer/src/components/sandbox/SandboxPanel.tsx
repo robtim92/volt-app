@@ -1,8 +1,10 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useCircuitStore } from '@stores/circuitStore'
 import { useSimulation } from '../../hooks/useSimulation'
 import {
   deleteCircuit,
+  exportCircuitJSON,
+  importCircuitJSON,
   listCircuits,
   loadCircuit,
   saveCircuit
@@ -18,6 +20,9 @@ export default function SandboxPanel(): JSX.Element {
   const [pendingType, setPendingType] = useState<ComponentType | null>(null)
   const [circuitName, setCircuitName] = useState('')
   const [saved, setSaved] = useState(() => listCircuits())
+  const [notice, setNotice] = useState<string | null>(null)
+  const canvasElRef = useRef<HTMLCanvasElement | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const components = useCircuitStore((s) => s.components)
   const wires = useCircuitStore((s) => s.wires)
@@ -41,6 +46,54 @@ export default function SandboxPanel(): JSX.Element {
       loadCircuitData(data.components, data.wires)
       setCircuitName(name)
     }
+  }
+
+  const flashNotice = (text: string): void => {
+    setNotice(text)
+    setTimeout(() => setNotice(null), 4000)
+  }
+
+  const downloadBlob = (blob: Blob, filename: string): void => {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleExportPNG = (): void => {
+    const canvas = canvasElRef.current
+    if (!canvas) return
+    canvas.toBlob((blob) => {
+      if (blob) downloadBlob(blob, `${circuitName.trim() || 'circuit'}.png`)
+    }, 'image/png')
+  }
+
+  const handleExportJSON = (): void => {
+    if (components.length === 0) return
+    const json = exportCircuitJSON(circuitName.trim() || 'circuit', components, wires)
+    downloadBlob(
+      new Blob([json], { type: 'application/json' }),
+      `${circuitName.trim() || 'circuit'}.volt.json`
+    )
+  }
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // allow re-importing the same file
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = importCircuitJSON(String(reader.result))
+      if ('error' in result) {
+        flashNotice(`Import failed: ${result.error}`)
+      } else {
+        loadCircuitData(result.components, result.wires)
+        flashNotice(`Imported ${file.name}`)
+      }
+    }
+    reader.readAsText(file)
   }
 
   const handleDeleteSaved = (): void => {
@@ -115,6 +168,37 @@ export default function SandboxPanel(): JSX.Element {
         </button>
         <div className="flex-1" />
         <button
+          onClick={handleExportPNG}
+          disabled={components.length === 0}
+          title="Export the canvas as a PNG image"
+          className="px-2 py-1 text-sm rounded bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          PNG
+        </button>
+        <button
+          onClick={handleExportJSON}
+          disabled={components.length === 0}
+          title="Export the circuit as a JSON file"
+          className="px-2 py-1 text-sm rounded bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Export
+        </button>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          title="Import a circuit from a JSON file"
+          className="px-2 py-1 text-sm rounded bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-white/20"
+        >
+          Import
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,application/json"
+          onChange={handleImportFile}
+          className="hidden"
+          aria-label="Import circuit file"
+        />
+        <button
           onClick={clearCircuit}
           disabled={components.length === 0}
           className="px-3 py-1 text-sm rounded bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
@@ -127,7 +211,11 @@ export default function SandboxPanel(): JSX.Element {
       <div className="flex flex-1 min-h-0">
         <Palette pendingType={pendingType} onPick={setPendingType} />
         <div className="flex-1 min-w-0 relative">
-          <CircuitCanvas pendingType={pendingType} onPlaced={onPlaced} />
+          <CircuitCanvas
+            pendingType={pendingType}
+            onPlaced={onPlaced}
+            canvasElRef={canvasElRef}
+          />
         </div>
         <Inspector />
       </div>
@@ -135,7 +223,7 @@ export default function SandboxPanel(): JSX.Element {
       {/* Status bar */}
       <div className="h-7 shrink-0 flex items-center px-3 border-t border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-brand-navy/40">
         <span className={`text-xs ${toneClass}`} data-testid="sim-status">
-          {status.text}
+          {notice ?? status.text}
         </span>
       </div>
     </div>

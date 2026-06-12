@@ -17,8 +17,10 @@
 import { GROUND, LED_PARAMS, type Netlist, type NetlistElement } from './solver'
 import { ELEMENTS, type CircuitComponent, type Wire } from './elements'
 
-/** Resistance used for closed switches and DC-shorted inductors */
+/** Resistance used for closed switches, ammeters, and DC-shorted inductors */
 const SHORT_RESISTANCE = 1e-3
+/** Voltmeter input impedance (10 MΩ, like a real multimeter) */
+const VOLTMETER_RESISTANCE = 1e7
 
 export interface NetlistBuildResult {
   netlist: Netlist
@@ -182,6 +184,14 @@ export function buildNetlist(
         break
       case 'capacitor':
         // DC steady state: capacitor is an open circuit — no element
+        break
+      case 'voltmeter':
+        // Near-ideal voltmeter: very high input impedance
+        elements.push({ id: c.id, type: 'resistor', value: VOLTMETER_RESISTANCE, nodes })
+        break
+      case 'ammeter':
+        // Near-ideal ammeter: negligible series resistance
+        elements.push({ id: c.id, type: 'resistor', value: SHORT_RESISTANCE, nodes })
         break
     }
   }
