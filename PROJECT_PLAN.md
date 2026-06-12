@@ -77,7 +77,9 @@
 
 **Done (June 12, 2026):** MNA solver with Newton-Raphson diodes/LEDs (52 tests passing); component registry; union-find netlist builder; Web Worker simulation loop; interactive canvas sandbox (place / drag / rotate / wire / delete, voltage-colored wires, animated current flow, LED glow, switch toggling); inspector with live measurements; named save/load (versioned JSON in localStorage). Typecheck + web build clean.
 
-**Remaining:** pan/zoom on canvas, voltmeter/ammeter probe components, PNG export, JSON file export/import UI, packaging verification (electron-builder Win/Mac), Playwright E2E, hands-on usability pass.
+**Also done (June 12, 2026, second pass):** canvas pan/zoom (wheel zoom about cursor, middle/Alt-drag pan, 0 resets), voltmeter/ammeter components with live readouts, PNG export, JSON file export/import in the toolbar.
+
+**Remaining:** packaging verification (electron-builder Win/Mac — needs a real machine), Playwright E2E, hands-on usability pass.
 
 1. **Solver first (weeks 1–3):** MNA engine in pure TS — resistors, V/I sources, ground; then Newton-Raphson for diodes/LEDs; Web Worker wrapper with a typed message protocol; SPICE-validated test suite. *This is the highest-risk item; build before UI.*
 2. **Canvas (weeks 3–5):** grid canvas with pan/zoom; component palette (click-to-place, drag, rotate); terminal-to-terminal wiring with auto-routing; selection + property editor (value, label).
@@ -87,7 +89,11 @@
 
 **MVP success criteria (unchanged from v1.2):** place components, draw wires, continuous real-time sim with animated current, save/reload, runs identically in browser and as desktop app, solver handles series/parallel/mixed + diodes.
 
-### Phase 2 — Lesson Engine + DC Track (~8 weeks)
+### Phase 2 — Lesson Engine + DC Track (~8 weeks) — 🚧 started
+
+**Done (June 12, 2026):** lesson schema (`lessons/types.ts`), card player with progress bar and first-answer quiz scoring, lesson list grouped by module with completion badges, 5 authored DC lessons (fundamentals, Ohm's law, series, parallel, diodes/LEDs) each with quizzes and sandbox circuit presets, content-integrity test suite (presets must solve in the simulator).
+
+**Remaining in Phase 2:**
 - Lesson card system (step sequencer, card types: concept / worked example / guided lab / challenge)
 - Embedded mini-sim widgets inside cards; guided lab mode (constrained palette, step overlay, completion gate)
 - All 6 DC modules authored (JSON/MD in repo; AI-assisted drafts, human-reviewed)
