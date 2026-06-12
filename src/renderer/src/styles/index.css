@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Smooth dark mode transitions */
+  *, *::before, *::after {
+    @apply transition-colors duration-150;
+  }
+
+  /* Disable transition on page load to avoid flash */
+  .no-transition, .no-transition * {
+    transition: none !important;
+  }
+
+  /* Custom scrollbar — matches dark/light theme */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 dark:bg-gray-600 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400 dark:bg-gray-500;
+  }
+}
+
+@layer components {
+  /* Sidebar nav item */
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
+           text-gray-600 dark:text-gray-400
+           hover:bg-gray-100 dark:hover:bg-white/10
+           hover:text-gray-900 dark:hover:text-white
+           transition-colors cursor-pointer select-none;
+  }
+  .nav-item.active {
+    @apply bg-brand-yellow/10 text-brand-yellow;
+  }
+}
