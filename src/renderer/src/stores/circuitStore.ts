@@ -1,37 +1,19 @@
 import { create } from 'zustand'
+import type { CircuitComponent, ComponentType, Wire } from '../sim/elements'
 
-// ── Types ────────────────────────────────────────────────────────────────────
-// These will expand substantially in Phase 1 when the MNA solver and canvas
-// are built. For now they define the shape the rest of the app will code against.
-
-export type ComponentType =
-  | 'resistor' | 'capacitor' | 'inductor'
-  | 'voltage_source' | 'current_source'
-  | 'diode' | 'led' | 'transistor_npn'
-  | 'switch' | 'ground' | 'wire_node'
-
-export interface CircuitComponent {
-  id: string
-  type: ComponentType
-  x: number         // canvas position (pixels)
-  y: number
-  rotation: number  // degrees: 0 | 90 | 180 | 270
-  value?: number    // e.g. resistance in Ω, capacitance in F
-  label?: string    // user-visible label
-}
-
-export interface Wire {
-  id: string
-  fromComponentId: string
-  fromTerminal: number   // terminal index on the component
-  toComponentId: string
-  toTerminal: number
-}
+// Re-export the canonical circuit types so existing imports keep working
+export type { CircuitComponent, ComponentType, Wire }
 
 export interface SimulationResult {
-  nodeVoltages: Record<string, number>    // node id → voltage (V)
-  branchCurrents: Record<string, number>  // wire id → current (A)
   solved: boolean
+  /** node name → voltage (V) */
+  nodeVoltages: Record<string, number>
+  /** component id → current (A) flowing terminal 0 → terminal 1 */
+  elementCurrents: Record<string, number>
+  /** `${componentId}:${terminalIndex}` → node name */
+  terminalNodes: Record<string, string>
+  /** netlist warnings (unconnected terminals, etc.) */
+  warnings: string[]
   error?: string
 }
 
@@ -41,15 +23,17 @@ interface CircuitState {
   simResult: SimulationResult | null
   selectedComponentId: string | null
 
-  // Actions — implementations come in Phase 1 with the canvas
   addComponent: (component: CircuitComponent) => void
   removeComponent: (id: string) => void
   updateComponent: (id: string, patch: Partial<CircuitComponent>) => void
+  toggleSwitch: (id: string) => void
   addWire: (wire: Wire) => void
   removeWire: (id: string) => void
-  setSimResult: (result: SimulationResult) => void
+  setSimResult: (result: SimulationResult | null) => void
   selectComponent: (id: string | null) => void
   clearCircuit: () => void
+  /** Replace the whole circuit (used by load/import) */
+  loadCircuitData: (components: CircuitComponent[], wires: Wire[]) => void
 }
 
 export const useCircuitStore = create<CircuitState>()((set) => ({
@@ -64,7 +48,8 @@ export const useCircuitStore = create<CircuitState>()((set) => ({
   removeComponent: (id) =>
     set((s) => ({
       components: s.components.filter((c) => c.id !== id),
-      wires: s.wires.filter((w) => w.fromComponentId !== id && w.toComponentId !== id)
+      wires: s.wires.filter((w) => w.fromComponentId !== id && w.toComponentId !== id),
+      selectedComponentId: s.selectedComponentId === id ? null : s.selectedComponentId
     })),
 
   updateComponent: (id, patch) =>
@@ -72,16 +57,44 @@ export const useCircuitStore = create<CircuitState>()((set) => ({
       components: s.components.map((c) => (c.id === id ? { ...c, ...patch } : c))
     })),
 
-  addWire: (wire) =>
-    set((s) => ({ wires: [...s.wires, wire] })),
+  toggleSwitch: (id) =>
+    set((s) => ({
+      components: s.components.map((c) =>
+        c.id === id && c.type === 'switch' ? { ...c, closed: !c.closed } : c
+      )
+    })),
 
-  removeWire: (id) =>
-    set((s) => ({ wires: s.wires.filter((w) => w.id !== id) })),
+  addWire: (wire) =>
+    set((s) => {
+      // No duplicate wires between the same two terminals, no self-wires
+      const same = (w: Wire): boolean =>
+        (w.fromComponentId === wire.fromComponentId &&
+          w.fromTerminal === wire.fromTerminal &&
+          w.toComponentId === wire.toComponentId &&
+          w.toTerminal === wire.toTerminal) ||
+        (w.fromComponentId === wire.toComponentId &&
+          w.fromTerminal === wire.toTerminal &&
+          w.toComponentId === wire.fromComponentId &&
+          w.toTerminal === wire.fromTerminal)
+      if (
+        (wire.fromComponentId === wire.toComponentId &&
+          wire.fromTerminal === wire.toTerminal) ||
+        s.wires.some(same)
+      ) {
+        return s
+      }
+      return { wires: [...s.wires, wire] }
+    }),
+
+  removeWire: (id) => set((s) => ({ wires: s.wires.filter((w) => w.id !== id) })),
 
   setSimResult: (result) => set({ simResult: result }),
 
   selectComponent: (id) => set({ selectedComponentId: id }),
 
   clearCircuit: () =>
-    set({ components: [], wires: [], simResult: null, selectedComponentId: null })
+    set({ components: [], wires: [], simResult: null, selectedComponentId: null }),
+
+  loadCircuitData: (components, wires) =>
+    set({ components, wires, simResult: null, selectedComponentId: null })
 }))

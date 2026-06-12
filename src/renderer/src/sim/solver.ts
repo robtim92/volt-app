@@ -1,17 +1,24 @@
 /**
  * Volt — DC Circuit Solver (Modified Nodal Analysis)
  *
- * Pure-TypeScript linear MNA engine. No DOM dependencies — designed to be
- * wrapped in a Web Worker (Phase 1, canvas integration step).
+ * Pure-TypeScript MNA engine. No DOM dependencies — designed to be wrapped in
+ * a Web Worker.
  *
- * Currently supported elements (linear DC):
+ * Supported elements:
  *   - resistor        value = resistance in ohms (Ω)
  *   - voltage_source  value = DC voltage in volts (V), nodes[0] = positive terminal
  *   - current_source  value = DC current in amps (A), pushes current out of nodes[0]
  *                     into the external circuit and back into nodes[1]
+ *   - diode           nonlinear, Shockley model; nodes[0] = anode, nodes[1] = cathode;
+ *                     `params` selects the model (defaults to a 1N4148-style silicon
+ *                     diode; use LED_PARAMS for LEDs). `value` is ignored.
  *
- * Nonlinear elements (diode, LED, BJT) arrive next via Newton-Raphson iteration
- * around this linear core.
+ * Nonlinear circuits are solved by Newton-Raphson iteration: each diode is
+ * replaced by its linearized companion model (conductance Geq + current source
+ * Ieq) and the linear system is re-solved until the junction voltages stop
+ * changing. SPICE-style junction voltage limiting (pnjlim) keeps the
+ * exponential from overflowing, and a small Gmin conductance across each
+ * junction keeps reverse-biased circuits non-singular.
  *
  * Conventions (matching SPICE where applicable):
  *   - The ground node is named 'gnd' and is the 0 V reference. Every circuit
@@ -24,14 +31,43 @@
 
 export const GROUND = 'gnd'
 
-export type ElementType = 'resistor' | 'voltage_source' | 'current_source'
+/** Thermal voltage kT/q at ~27 °C */
+const VT = 0.02585
+/** Minimum junction conductance — keeps reverse-biased circuits solvable */
+const GMIN = 1e-12
+const MAX_NR_ITERATIONS = 200
+/** Convergence: max junction voltage change per iteration */
+const NR_TOLERANCE = 1e-9
+
+export type ElementType = 'resistor' | 'voltage_source' | 'current_source' | 'diode'
+
+export interface DiodeParams {
+  /** Saturation current Is (A) */
+  saturationCurrent: number
+  /** Emission coefficient n (ideality factor) */
+  emissionCoefficient: number
+}
+
+/** 1N4148-style small-signal silicon diode (Vf ≈ 0.6–0.7 V) */
+export const SILICON_DIODE_PARAMS: DiodeParams = {
+  saturationCurrent: 2.52e-9,
+  emissionCoefficient: 1.752
+}
+
+/** Generic red LED (Vf ≈ 1.8–2.0 V at typical currents) */
+export const LED_PARAMS: DiodeParams = {
+  saturationCurrent: 1e-18,
+  emissionCoefficient: 2
+}
 
 export interface NetlistElement {
   id: string
   type: ElementType
   value: number
-  /** [first terminal, second terminal]. For sources, nodes[0] is the + terminal. */
+  /** [first terminal, second terminal]. For sources, nodes[0] is the + terminal; for diodes, the anode. */
   nodes: [string, string]
+  /** Diode model parameters; ignored for other element types. */
+  params?: DiodeParams
 }
 
 export interface Netlist {
@@ -44,6 +80,8 @@ export interface SolveResult {
   nodeVoltages: Record<string, number>
   /** element id → current (A) flowing from nodes[0] to nodes[1]. */
   elementCurrents: Record<string, number>
+  /** Newton-Raphson iterations used (1 for purely linear circuits). */
+  iterations?: number
   error?: string
 }
 
@@ -54,7 +92,8 @@ function validate(netlist: Netlist): string | null {
 
   const nodes = new Set<string>()
   for (const el of netlist.elements) {
-    if (!Number.isFinite(el.value)) return `Element ${el.id} has an invalid value`
+    if (el.type !== 'diode' && !Number.isFinite(el.value))
+      return `Element ${el.id} has an invalid value`
     if (el.type === 'resistor' && el.value <= 0)
       return `Resistor ${el.id} must have positive resistance`
     nodes.add(el.nodes[0])
@@ -104,7 +143,6 @@ export function solveLinearSystem(A: number[][], b: number[]): number[] | null {
   const SINGULAR_EPS = 1e-12
 
   for (let col = 0; col < n; col++) {
-    // Partial pivot: find the row with the largest magnitude in this column
     let pivotRow = col
     for (let r = col + 1; r < n; r++) {
       if (Math.abs(A[r][col]) > Math.abs(A[pivotRow][col])) pivotRow = r
@@ -116,7 +154,6 @@ export function solveLinearSystem(A: number[][], b: number[]): number[] | null {
       ;[b[col], b[pivotRow]] = [b[pivotRow], b[col]]
     }
 
-    // Eliminate below
     for (let r = col + 1; r < n; r++) {
       const factor = A[r][col] / A[col][col]
       if (factor === 0) continue
@@ -125,7 +162,6 @@ export function solveLinearSystem(A: number[][], b: number[]): number[] | null {
     }
   }
 
-  // Back-substitution
   const x = new Array<number>(n).fill(0)
   for (let row = n - 1; row >= 0; row--) {
     let sum = b[row]
@@ -133,6 +169,36 @@ export function solveLinearSystem(A: number[][], b: number[]): number[] | null {
     x[row] = sum / A[row][row]
   }
   return x
+}
+
+// ── Diode model ──────────────────────────────────────────────────────────────
+
+function diodeCurrent(vd: number, p: DiodeParams): number {
+  const nvt = p.emissionCoefficient * VT
+  return p.saturationCurrent * (Math.exp(vd / nvt) - 1) + GMIN * vd
+}
+
+function diodeConductance(vd: number, p: DiodeParams): number {
+  const nvt = p.emissionCoefficient * VT
+  return (p.saturationCurrent / nvt) * Math.exp(vd / nvt) + GMIN
+}
+
+/**
+ * SPICE-style junction voltage limiting (pnjlim). Prevents Newton-Raphson from
+ * overshooting into exponential overflow while still allowing convergence.
+ */
+function limitJunctionVoltage(vNew: number, vOld: number, p: DiodeParams): number {
+  const nvt = p.emissionCoefficient * VT
+  const vCrit = nvt * Math.log(nvt / (Math.SQRT2 * p.saturationCurrent))
+
+  if (vNew > vCrit && Math.abs(vNew - vOld) > 2 * nvt) {
+    if (vOld > 0) {
+      const arg = 1 + (vNew - vOld) / nvt
+      return arg > 0 ? vOld + nvt * Math.log(arg) : vCrit
+    }
+    return vCrit
+  }
+  return vNew
 }
 
 // ── MNA solver ───────────────────────────────────────────────────────────────
@@ -158,58 +224,130 @@ export function solveDC(netlist: Netlist): SolveResult {
   const numNodes = nodeIndex.size
 
   const voltageSources = netlist.elements.filter((e) => e.type === 'voltage_source')
+  const diodes = netlist.elements.filter((e) => e.type === 'diode')
   const numVSources = voltageSources.length
   const size = numNodes + numVSources
 
   if (size === 0) return fail('Circuit has no nodes to solve')
 
-  // A·x = z, where x = [node voltages..., v-source currents...]
-  const A: number[][] = Array.from({ length: size }, () => new Array<number>(size).fill(0))
-  const z = new Array<number>(size).fill(0)
-
   // idx() returns -1 for ground, which means "skip the stamp"
   const idx = (node: string): number => (node === GROUND ? -1 : nodeIndex.get(node)!)
 
-  for (const el of netlist.elements) {
-    const [a, b] = el.nodes
-    const ia = idx(a)
-    const ib = idx(b)
+  /** Build and solve the MNA system for a given set of diode junction voltage guesses. */
+  const solveIteration = (junctionVoltages: number[]): number[] | null => {
+    const A: number[][] = Array.from({ length: size }, () => new Array<number>(size).fill(0))
+    const z = new Array<number>(size).fill(0)
 
-    if (el.type === 'resistor') {
-      const g = 1 / el.value
+    const stampConductance = (ia: number, ib: number, g: number): void => {
       if (ia >= 0) A[ia][ia] += g
       if (ib >= 0) A[ib][ib] += g
       if (ia >= 0 && ib >= 0) {
         A[ia][ib] -= g
         A[ib][ia] -= g
       }
-    } else if (el.type === 'current_source') {
-      // Pushes current out of nodes[0] into the circuit, returns at nodes[1]
-      if (ia >= 0) z[ia] += el.value
-      if (ib >= 0) z[ib] -= el.value
     }
+    const stampCurrent = (ia: number, ib: number, i: number): void => {
+      // current i injected into node a, drawn from node b
+      if (ia >= 0) z[ia] += i
+      if (ib >= 0) z[ib] -= i
+    }
+
+    for (const el of netlist.elements) {
+      const ia = idx(el.nodes[0])
+      const ib = idx(el.nodes[1])
+      if (el.type === 'resistor') {
+        stampConductance(ia, ib, 1 / el.value)
+      } else if (el.type === 'current_source') {
+        stampCurrent(ia, ib, el.value)
+      }
+    }
+
+    diodes.forEach((d, k) => {
+      const p = d.params ?? SILICON_DIODE_PARAMS
+      const vd = junctionVoltages[k]
+      const geq = diodeConductance(vd, p)
+      const ieq = diodeCurrent(vd, p) - geq * vd
+      const ia = idx(d.nodes[0])
+      const ib = idx(d.nodes[1])
+      stampConductance(ia, ib, geq)
+      // companion current source points anode → cathode, i.e. it draws ieq
+      // out of the anode node and injects it at the cathode
+      stampCurrent(ib, ia, ieq)
+    })
+
+    voltageSources.forEach((vs, k) => {
+      const row = numNodes + k
+      const ia = idx(vs.nodes[0])
+      const ib = idx(vs.nodes[1])
+      if (ia >= 0) {
+        A[ia][row] += 1
+        A[row][ia] += 1
+      }
+      if (ib >= 0) {
+        A[ib][row] -= 1
+        A[row][ib] -= 1
+      }
+      z[row] = vs.value
+    })
+
+    return solveLinearSystem(A, z)
   }
 
-  voltageSources.forEach((vs, k) => {
-    const row = numNodes + k
-    const ia = idx(vs.nodes[0]) // + terminal
-    const ib = idx(vs.nodes[1]) // - terminal
-    if (ia >= 0) {
-      A[ia][row] += 1
-      A[row][ia] += 1
-    }
-    if (ib >= 0) {
-      A[ib][row] -= 1
-      A[row][ib] -= 1
-    }
-    z[row] = vs.value
-  })
+  const junctionVoltageOf = (x: number[], d: NetlistElement): number => {
+    const ia = idx(d.nodes[0])
+    const ib = idx(d.nodes[1])
+    return (ia >= 0 ? x[ia] : 0) - (ib >= 0 ? x[ib] : 0)
+  }
 
-  const x = solveLinearSystem(A, z)
-  if (x === null)
-    return fail(
-      'Circuit could not be solved — check for voltage source loops or isolated components'
-    )
+  // ── Solve: single linear pass, or Newton-Raphson when diodes are present ──
+  let x: number[] | null = null
+  let iterations = 0
+
+  if (diodes.length === 0) {
+    x = solveIteration([])
+    iterations = 1
+    if (x === null)
+      return fail(
+        'Circuit could not be solved — check for voltage source loops or isolated components'
+      )
+  } else {
+    // Initial guess: every junction at its critical voltage
+    let guesses = diodes.map((d) => {
+      const p = d.params ?? SILICON_DIODE_PARAMS
+      const nvt = p.emissionCoefficient * VT
+      return nvt * Math.log(nvt / (Math.SQRT2 * p.saturationCurrent))
+    })
+
+    let converged = false
+    for (let iter = 1; iter <= MAX_NR_ITERATIONS; iter++) {
+      iterations = iter
+      x = solveIteration(guesses)
+      if (x === null)
+        return fail(
+          'Circuit could not be solved — check for voltage source loops or isolated components'
+        )
+
+      const solved = x
+      const newGuesses = diodes.map((d, k) => {
+        const p = d.params ?? SILICON_DIODE_PARAMS
+        return limitJunctionVoltage(junctionVoltageOf(solved, d), guesses[k], p)
+      })
+
+      const maxDelta = Math.max(...newGuesses.map((v, k) => Math.abs(v - guesses[k])))
+      guesses = newGuesses
+      if (maxDelta < NR_TOLERANCE) {
+        converged = true
+        break
+      }
+    }
+
+    if (!converged)
+      return fail('Simulation did not converge — try adding series resistance to diodes')
+
+    // Final consistent solve with converged junction voltages
+    x = solveIteration(guesses)
+    if (x === null) return fail('Circuit could not be solved')
+  }
 
   // ── Extract results ──
   const nodeVoltages: Record<string, number> = { [GROUND]: 0 }
@@ -222,14 +360,16 @@ export function solveDC(netlist: Netlist): SolveResult {
     if (el.type === 'resistor') {
       elementCurrents[el.id] = (voltageAt(el.nodes[0]) - voltageAt(el.nodes[1])) / el.value
     } else if (el.type === 'current_source') {
-      // Current through the source itself flows nodes[1] → nodes[0] internally;
-      // from the nodes[0] → nodes[1] perspective that is -value.
+      // Through the source itself, nodes[0] → nodes[1] is -value
       elementCurrents[el.id] = -el.value
+    } else if (el.type === 'diode') {
+      const p = el.params ?? SILICON_DIODE_PARAMS
+      elementCurrents[el.id] = diodeCurrent(voltageAt(el.nodes[0]) - voltageAt(el.nodes[1]), p)
     }
   }
   voltageSources.forEach((vs, k) => {
-    elementCurrents[vs.id] = x[numNodes + k]
+    elementCurrents[vs.id] = x![numNodes + k]
   })
 
-  return { solved: true, nodeVoltages, elementCurrents }
+  return { solved: true, nodeVoltages, elementCurrents, iterations }
 }

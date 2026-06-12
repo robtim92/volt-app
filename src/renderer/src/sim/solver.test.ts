@@ -5,7 +5,20 @@
  * (SPICE conventions: voltage source current is negative when sourcing power).
  */
 import { describe, it, expect } from 'vitest'
-import { solveDC, solveLinearSystem, GROUND, type Netlist } from './solver'
+import {
+  solveDC,
+  solveLinearSystem,
+  GROUND,
+  SILICON_DIODE_PARAMS,
+  LED_PARAMS,
+  type DiodeParams,
+  type Netlist
+} from './solver'
+
+const VT = 0.02585
+/** Shockley diode current (without Gmin) for cross-checking solver output */
+const shockley = (vd: number, p: DiodeParams): number =>
+  p.saturationCurrent * (Math.exp(vd / (p.emissionCoefficient * VT)) - 1)
 
 const close = (actual: number, expected: number, digits = 9): void =>
   expect(actual).toBeCloseTo(expected, digits)
@@ -158,6 +171,95 @@ describe('solveDC — basic circuits', () => {
     close(r.elementCurrents['R1'], 0.005) // (10-5)/1k
     close(r.elementCurrents['R2'], 0)     // (5-5)/2k
     close(r.elementCurrents['R3'], 0.005)
+  })
+})
+
+describe('solveDC — nonlinear (diodes & LEDs)', () => {
+  it('reports a single iteration for linear circuits', () => {
+    const r = solveDC({
+      elements: [
+        { id: 'V1', type: 'voltage_source', value: 5, nodes: ['a', GROUND] },
+        { id: 'R1', type: 'resistor', value: 1000, nodes: ['a', GROUND] }
+      ]
+    })
+    expect(r.solved).toBe(true)
+    expect(r.iterations).toBe(1)
+  })
+
+  it('solves a forward-biased silicon diode (5V — 1kΩ — D — gnd)', () => {
+    const r = solveDC({
+      elements: [
+        { id: 'V1', type: 'voltage_source', value: 5, nodes: ['vcc', GROUND] },
+        { id: 'R1', type: 'resistor', value: 1000, nodes: ['vcc', 'k'] },
+        { id: 'D1', type: 'diode', value: 0, nodes: ['k', GROUND] }
+      ]
+    })
+    expect(r.solved).toBe(true)
+    const vd = r.nodeVoltages['k']
+    // Plausible silicon forward drop at ~4 mA
+    expect(vd).toBeGreaterThan(0.5)
+    expect(vd).toBeLessThan(0.8)
+    // KCL: resistor current equals diode current
+    const iR = (5 - vd) / 1000
+    close(r.elementCurrents['R1'], iR, 9)
+    close(r.elementCurrents['D1'], iR, 7)
+    // Solver result satisfies the Shockley equation at the solved Vd
+    close(shockley(vd, SILICON_DIODE_PARAMS), iR, 7)
+    expect(r.elementCurrents['D1']).toBeGreaterThan(0.003)
+    expect(r.elementCurrents['D1']).toBeLessThan(0.005)
+  })
+
+  it('blocks current when reverse-biased', () => {
+    // V1 — R1 — n1, diode anode at gnd / cathode at n1 → reverse biased
+    const r = solveDC({
+      elements: [
+        { id: 'V1', type: 'voltage_source', value: 5, nodes: ['vcc', GROUND] },
+        { id: 'R1', type: 'resistor', value: 1000, nodes: ['vcc', 'n1'] },
+        { id: 'D1', type: 'diode', value: 0, nodes: [GROUND, 'n1'] }
+      ]
+    })
+    expect(r.solved).toBe(true)
+    // Essentially no current → full supply voltage appears across the diode
+    expect(Math.abs(r.elementCurrents['D1'])).toBeLessThan(1e-7)
+    expect(r.nodeVoltages['n1']).toBeGreaterThan(4.999)
+  })
+
+  it('solves an LED with a current-limiting resistor (5V — 220Ω — LED)', () => {
+    const r = solveDC({
+      elements: [
+        { id: 'V1', type: 'voltage_source', value: 5, nodes: ['vcc', GROUND] },
+        { id: 'R1', type: 'resistor', value: 220, nodes: ['vcc', 'a'] },
+        { id: 'D1', type: 'diode', value: 0, nodes: ['a', GROUND], params: LED_PARAMS }
+      ]
+    })
+    expect(r.solved).toBe(true)
+    const vf = r.nodeVoltages['a']
+    // Typical red LED forward voltage
+    expect(vf).toBeGreaterThan(1.6)
+    expect(vf).toBeLessThan(2.2)
+    // Current consistent on both elements, in the expected LED range
+    close(r.elementCurrents['D1'], r.elementCurrents['R1'], 7)
+    expect(r.elementCurrents['D1']).toBeGreaterThan(0.01)
+    expect(r.elementCurrents['D1']).toBeLessThan(0.017)
+  })
+
+  it('solves two diodes in series', () => {
+    const r = solveDC({
+      elements: [
+        { id: 'V1', type: 'voltage_source', value: 5, nodes: ['vcc', GROUND] },
+        { id: 'R1', type: 'resistor', value: 1000, nodes: ['vcc', 'm'] },
+        { id: 'D1', type: 'diode', value: 0, nodes: ['m', 'n'] },
+        { id: 'D2', type: 'diode', value: 0, nodes: ['n', GROUND] }
+      ]
+    })
+    expect(r.solved).toBe(true)
+    const vd1 = r.nodeVoltages['m'] - r.nodeVoltages['n']
+    const vd2 = r.nodeVoltages['n']
+    // Identical diodes carrying the same current → identical drops
+    close(vd1, vd2, 6)
+    const iR = (5 - r.nodeVoltages['m']) / 1000
+    close(r.elementCurrents['D1'], iR, 7)
+    close(r.elementCurrents['D2'], iR, 7)
   })
 })
 

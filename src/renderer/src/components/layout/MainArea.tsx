@@ -1,6 +1,7 @@
 import { useUIStore } from '@stores/uiStore'
+import SandboxPanel from '@components/sandbox/SandboxPanel'
 
-// Placeholder panels — each will be replaced by real components in later phases
+// Placeholder panels — replaced by real components phase by phase
 function PlaceholderPanel({ title, description }: { title: string; description: string }): JSX.Element {
   return (
     <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-8">
@@ -21,12 +22,7 @@ const panels: Record<string, JSX.Element> = {
       description="Step-by-step interactive lessons, guided labs, and worked examples. Full DC track coming in Phase 2."
     />
   ),
-  sandbox: (
-    <PlaceholderPanel
-      title="Circuit Sandbox"
-      description="Drag-and-drop circuit builder with live MNA simulation. This is the Phase 1 MVP — the canvas and solver are next."
-    />
-  ),
+  sandbox: <SandboxPanel />,
   dashboard: (
     <PlaceholderPanel
       title="Dashboard"
@@ -46,7 +42,7 @@ export default function MainArea(): JSX.Element {
   const content = panels[activePanel] ?? panels['sandbox']
 
   return (
-    <main className="flex-1 overflow-auto bg-white dark:bg-brand-dark">
+    <main className="flex-1 min-h-0 overflow-hidden bg-white dark:bg-brand-dark">
       {content}
     </main>
   )
