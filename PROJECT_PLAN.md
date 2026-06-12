@@ -66,13 +66,19 @@
 
 ## 4. Development Roadmap
 
-### Phase 0 — Foundation hardening (immediate, ~1 week)
-- [ ] `git init`, initial commit, push to `robtim92/volt-app` (repo is currently empty); verify CI goes green
-- [ ] Add README.md, LICENSE (MIT), CONTRIBUTING stub
-- [ ] Add storage abstraction (localStorage ↔ electron-store)
-- [ ] Branch protection on `main`; `develop` branch for integration
+### Phase 0 — Foundation hardening ✅ (June 12, 2026)
+- [x] `git init`, initial commit, push to `robtim92/volt-app`
+- [x] Add README.md, LICENSE (MIT), CONTRIBUTING stub
+- [x] Fix CI blockers: missing devDependencies (@electron-toolkit/tsconfig, @testing-library/user-event), missing package-lock.json, brittle shell test
+- [ ] Branch protection on `main` (user action on GitHub)
+- [ ] Storage abstraction (localStorage ↔ electron-store) — deferred; zustand persist + localStorage works in both targets for now
 
-### Phase 1 — Simulator Core / MVP (~6–8 weeks)
+### Phase 1 — Simulator Core / MVP (~6–8 weeks) — 🚧 in progress
+
+**Done (June 12, 2026):** MNA solver with Newton-Raphson diodes/LEDs (52 tests passing); component registry; union-find netlist builder; Web Worker simulation loop; interactive canvas sandbox (place / drag / rotate / wire / delete, voltage-colored wires, animated current flow, LED glow, switch toggling); inspector with live measurements; named save/load (versioned JSON in localStorage). Typecheck + web build clean.
+
+**Remaining:** pan/zoom on canvas, voltmeter/ammeter probe components, PNG export, JSON file export/import UI, packaging verification (electron-builder Win/Mac), Playwright E2E, hands-on usability pass.
+
 1. **Solver first (weeks 1–3):** MNA engine in pure TS — resistors, V/I sources, ground; then Newton-Raphson for diodes/LEDs; Web Worker wrapper with a typed message protocol; SPICE-validated test suite. *This is the highest-risk item; build before UI.*
 2. **Canvas (weeks 3–5):** grid canvas with pan/zoom; component palette (click-to-place, drag, rotate); terminal-to-terminal wiring with auto-routing; selection + property editor (value, label).
 3. **Live simulation loop (weeks 5–6):** debounced re-solve on edits; node voltage color-coding; animated current flow on wires; voltmeter/ammeter components.
