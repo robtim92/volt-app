@@ -1,6 +1,7 @@
 import { useUIStore } from '@stores/uiStore'
 import SandboxPanel from '@components/sandbox/SandboxPanel'
 import LessonsPanel from '@components/lessons/LessonsPanel'
+import DashboardPanel from '@components/dashboard/DashboardPanel'
 
 // Placeholder panels — replaced by real components phase by phase
 function PlaceholderPanel({ title, description }: { title: string; description: string }): JSX.Element {
@@ -19,12 +20,7 @@ function PlaceholderPanel({ title, description }: { title: string; description: 
 const panels: Record<string, JSX.Element> = {
   lessons: <LessonsPanel />,
   sandbox: <SandboxPanel />,
-  dashboard: (
-    <PlaceholderPanel
-      title="Dashboard"
-      description="Your learning progress, streak, quiz accuracy, and lesson map. Coming in Phase 3."
-    />
-  ),
+  dashboard: <DashboardPanel />,
   settings: (
     <PlaceholderPanel
       title="Settings"

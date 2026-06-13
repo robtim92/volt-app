@@ -2,10 +2,12 @@ import { useEffect } from 'react'
 import Sidebar from '@components/layout/Sidebar'
 import TopBar from '@components/layout/TopBar'
 import MainArea from '@components/layout/MainArea'
+import OnboardingQuiz from '@components/onboarding/OnboardingQuiz'
 import { useUIStore } from '@stores/uiStore'
 
 function App(): JSX.Element {
   const darkMode = useUIStore((s) => s.darkMode)
+  const hasOnboarded = useUIStore((s) => s.hasOnboarded)
 
   // Sync dark mode class on the document root
   useEffect(() => {
@@ -19,6 +21,7 @@ function App(): JSX.Element {
         <TopBar />
         <MainArea />
       </div>
+      {!hasOnboarded && <OnboardingQuiz />}
     </div>
   )
 }

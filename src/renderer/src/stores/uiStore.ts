@@ -9,11 +9,13 @@ interface UIState {
   activeTrack: Track
   activePanel: Panel
   sidebarOpen: boolean
+  hasOnboarded: boolean
 
   toggleDarkMode: () => void
   setActiveTrack: (track: Track) => void
   setActivePanel: (panel: Panel) => void
   setSidebarOpen: (open: boolean) => void
+  completeOnboarding: () => void
 }
 
 export const useUIStore = create<UIState>()(
@@ -24,18 +26,21 @@ export const useUIStore = create<UIState>()(
       activeTrack: 'dc',
       activePanel: 'sandbox',
       sidebarOpen: true,
+      hasOnboarded: false,
 
       // Actions
       toggleDarkMode: () => set((s) => ({ darkMode: !s.darkMode })),
       setActiveTrack: (track) => set({ activeTrack: track }),
       setActivePanel: (panel) => set({ activePanel: panel }),
-      setSidebarOpen: (open) => set({ sidebarOpen: open })
+      setSidebarOpen: (open) => set({ sidebarOpen: open }),
+      completeOnboarding: () => set({ hasOnboarded: true })
     }),
     {
       name: 'volt-ui',              // localStorage key
       partialize: (s) => ({         // only persist user preferences, not transient UI state
         darkMode: s.darkMode,
-        activeTrack: s.activeTrack
+        activeTrack: s.activeTrack,
+        hasOnboarded: s.hasOnboarded
       })
     }
   )

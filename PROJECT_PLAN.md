@@ -89,18 +89,26 @@
 
 **MVP success criteria (unchanged from v1.2):** place components, draw wires, continuous real-time sim with animated current, save/reload, runs identically in browser and as desktop app, solver handles series/parallel/mixed + diodes.
 
-### Phase 2 — Lesson Engine + DC Track (~8 weeks) — 🚧 started
+### Phase 2 — Lesson Engine + DC Track (~8 weeks) — ✅ complete (June 13, 2026)
 
-**Done (June 12, 2026):** lesson schema (`lessons/types.ts`), card player with progress bar and first-answer quiz scoring, lesson list grouped by module with completion badges, 5 authored DC lessons (fundamentals, Ohm's law, series, parallel, diodes/LEDs) each with quizzes and sandbox circuit presets, content-integrity test suite (presets must solve in the simulator).
+**All 6 DC modules authored (8 lessons total):**
+- `dc-fund-1`: Voltage, Current & Resistance
+- `dc-ohm-1`: Ohm's Law · `dc-ohm-2`: Power & Energy
+- `dc-topo-1`: Series Circuits · `dc-topo-2`: Parallel Circuits
+- `dc-kirckhoff-1`: Kirchhoff's Laws
+- `dc-rc-1`: RC & RL Time Constants
+- `dc-semi-1`: Diodes & LEDs
 
-**Remaining in Phase 2:**
-- Lesson card system (step sequencer, card types: concept / worked example / guided lab / challenge)
-- Embedded mini-sim widgets inside cards; guided lab mode (constrained palette, step overlay, completion gate)
-- All 6 DC modules authored (JSON/MD in repo; AI-assisted drafts, human-reviewed)
-- Onboarding placement quiz; lesson progress tracking wired to `lessonStore`
-- CMS/admin panel v1 (card editor, lab configurator) — start late in phase, finish in Phase 3 if needed
+**Lesson engine features shipped:**
+- Card player with progress bar, first-answer quiz scoring, "Open in sandbox" presets
+- Completion screen with soft-gate nudge (score < 70% → "Review lesson" prompt, never hard-blocks)
+- Content-integrity test suite (every preset must `solveDC()` successfully)
+- Progress dashboard: track overview with progress bar, per-module lesson list, quiz scores, "Continue" shortcut
+- Onboarding placement quiz (5 diagnostic questions → recommended starting lesson, dismissible)
 
-### Phase 3 — Quiz System + Dashboard + AI (~6 weeks)
+**Deferred to Phase 3:** guided lab mode (constrained palette + step overlay), CMS/admin panel, embedded mini-sim within card body (current "Open in sandbox" button suffices for v1).
+
+### Phase 3 — Quiz System + Dashboard + AI (~6 weeks) — 🚧 next
 - Quiz engine: multiple choice, numeric, **circuit completion** (see design below), T/F with explanation; instant feedback; soft-gate nudge (<70% score → review prompt, never hard-blocks)
 - DC quizzes authored; spaced-repetition review scheduling
 - Dashboard: per-track progress, lesson map (node graph), streak, quiz accuracy by topic
