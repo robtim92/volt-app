@@ -12,7 +12,7 @@ import { useLessonStore } from '@stores/lessonStore'
 import { useUIStore } from '@stores/uiStore'
 import { useCircuitStore } from '@stores/circuitStore'
 import { getLesson, getModulesForTrack, type Lesson, type LessonCard } from '../../lessons'
-import type { CircuitPreset } from '../../lessons/types'
+import type { CircuitPreset, CircuitQuizCard } from '../../lessons/types'
 
 // ── List view ────────────────────────────────────────────────────────────────
 
@@ -44,7 +44,7 @@ function LessonList(): JSX.Element {
       <div className="max-w-2xl mx-auto px-6 py-8">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">DC Circuits</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-8">
-          From “what is a volt?” to building real circuits — every lesson pairs theory with the
+          From "what is a volt?" to building real circuits — every lesson pairs theory with the
           live simulator.
         </p>
 
@@ -215,12 +215,52 @@ function QuizCardView({
   )
 }
 
+function CircuitQuizCardView({
+  card,
+  lessonId,
+  cardIndex,
+  attempted
+}: {
+  card: CircuitQuizCard
+  lessonId: string
+  cardIndex: number
+  attempted: boolean
+}): JSX.Element {
+  const startCircuitQuiz = useUIStore((s) => s.startCircuitQuiz)
+
+  return (
+    <div>
+      <div className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-brand-yellow mb-3">
+        <span>⚡</span> Circuit Challenge
+      </div>
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+        {card.question}
+      </h3>
+      <p className="text-[15px] leading-relaxed text-gray-700 dark:text-gray-300 mb-6">
+        {card.instructions}
+      </p>
+      {attempted && (
+        <p className="text-sm text-green-600 dark:text-green-400 mb-4">
+          ✓ You have attempted this challenge — you can open it again to keep trying or move on.
+        </p>
+      )}
+      <button
+        onClick={() => startCircuitQuiz(lessonId, cardIndex, card)}
+        className="px-5 py-2.5 rounded-lg bg-brand-yellow text-brand-dark font-semibold text-sm hover:brightness-110"
+      >
+        {attempted ? 'Open in sandbox again →' : 'Open in sandbox to solve →'}
+      </button>
+    </div>
+  )
+}
+
 function LessonPlayer({ lesson }: { lesson: Lesson }): JSX.Element {
   const cardIndex = useLessonStore((s) => s.activeCardIndex)
   const setActiveCard = useLessonStore((s) => s.setActiveCard)
   const setActiveLesson = useLessonStore((s) => s.setActiveLesson)
   const markLessonComplete = useLessonStore((s) => s.markLessonComplete)
   const recordQuizScore = useLessonStore((s) => s.recordQuizScore)
+  const circuitQuizResults = useLessonStore((s) => s.circuitQuizResults)
   const setActivePanel = useUIStore((s) => s.setActivePanel)
   const loadCircuitData = useCircuitStore((s) => s.loadCircuitData)
 
@@ -231,7 +271,18 @@ function LessonPlayer({ lesson }: { lesson: Lesson }): JSX.Element {
 
   const card = lesson.cards[Math.min(cardIndex, lesson.cards.length - 1)]
   const isLast = cardIndex >= lesson.cards.length - 1
-  const quizAnswered = card.type !== 'quiz' || answers[cardIndex] !== undefined
+
+  // circuit_quiz gates on attempt (any result recorded), not on pass
+  const circuitQuizAttempted =
+    card.type === 'circuit_quiz' &&
+    circuitQuizResults[lesson.id]?.[String(cardIndex)] !== undefined
+
+  const quizAnswered =
+    card.type === 'quiz'
+      ? answers[cardIndex] !== undefined
+      : card.type === 'circuit_quiz'
+        ? circuitQuizAttempted
+        : true
 
   const openCircuit = (preset: CircuitPreset): void => {
     // deep-clone so sandbox edits never touch the lesson content
@@ -241,6 +292,7 @@ function LessonPlayer({ lesson }: { lesson: Lesson }): JSX.Element {
   }
 
   const finish = (): void => {
+    // Only type:'quiz' cards count toward the score; circuit_quiz gates but doesn't score
     const quizIndices = lesson.cards
       .map((c, i) => (c.type === 'quiz' ? i : -1))
       .filter((i) => i >= 0)
@@ -317,11 +369,18 @@ function LessonPlayer({ lesson }: { lesson: Lesson }): JSX.Element {
                 </button>
               )}
             </div>
-          ) : (
+          ) : card.type === 'quiz' ? (
             <QuizCardView
               card={card}
               chosen={answers[cardIndex]}
               onChoose={(i) => setAnswers((a) => ({ ...a, [cardIndex]: i }))}
+            />
+          ) : (
+            <CircuitQuizCardView
+              card={card}
+              lessonId={lesson.id}
+              cardIndex={cardIndex}
+              attempted={circuitQuizAttempted}
             />
           )}
         </div>

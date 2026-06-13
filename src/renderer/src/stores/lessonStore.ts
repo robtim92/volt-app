@@ -10,13 +10,18 @@ export type TrackId = 'dc' | 'ac' | 'digital'
 export interface LessonProgress {
   lessonId: string
   completed: boolean
-  lastQuizScore?: number   // 0–100
+  lastQuizScore?: number   // 0-100
   lastVisitedAt?: string   // ISO timestamp
 }
 
 export interface LessonState {
   // Progress — persisted to localStorage
   progress: Record<string, LessonProgress>  // key: lessonId
+  /**
+   * Pass/fail for each circuit quiz card.
+   * Outer key: lessonId. Inner key: card index (as string). Value: passed.
+   */
+  circuitQuizResults: Record<string, Record<string, boolean>>
 
   // Navigation state — not persisted
   activeLessonId: string | null
@@ -25,6 +30,7 @@ export interface LessonState {
   // Actions
   markLessonComplete: (lessonId: string) => void
   recordQuizScore: (lessonId: string, score: number) => void
+  recordCircuitQuizResult: (lessonId: string, cardIndex: number, passed: boolean) => void
   setActiveLesson: (lessonId: string | null) => void
   setActiveCard: (index: number) => void
   advanceCard: () => void
@@ -34,6 +40,7 @@ export const useLessonStore = create<LessonState>()(
   persist(
     (set) => ({
       progress: {},
+      circuitQuizResults: {},
       activeLessonId: null,
       activeCardIndex: 0,
 
@@ -63,6 +70,17 @@ export const useLessonStore = create<LessonState>()(
           }
         })),
 
+      recordCircuitQuizResult: (lessonId, cardIndex, passed) =>
+        set((s) => ({
+          circuitQuizResults: {
+            ...s.circuitQuizResults,
+            [lessonId]: {
+              ...s.circuitQuizResults[lessonId],
+              [String(cardIndex)]: passed
+            }
+          }
+        })),
+
       setActiveLesson: (lessonId) =>
         set({ activeLessonId: lessonId, activeCardIndex: 0 }),
 
@@ -73,7 +91,7 @@ export const useLessonStore = create<LessonState>()(
     }),
     {
       name: 'volt-lessons',
-      partialize: (s) => ({ progress: s.progress })  // only persist completion data
+      partialize: (s) => ({ progress: s.progress, circuitQuizResults: s.circuitQuizResults })
     }
   )
 )

@@ -5,7 +5,7 @@
  * formulas second, jargon always explained. All circuit presets are verified
  * solvable by the content test suite.
  */
-import type { CircuitComponent, CircuitPreset, Lesson, Wire } from './types'
+import type { CircuitComponent, CircuitPreset, CircuitQuizCard, Lesson, Wire } from './types'
 
 // ── Preset helpers ───────────────────────────────────────────────────────────
 
@@ -179,6 +179,85 @@ function rcPreset(): CircuitPreset {
       w(v1, 1, gnd, 0)
     ]
   }
+}
+
+/**
+ * Circuit quiz starter: 5V source + LED pre-placed, no wires.
+ * Learner must add a current-limiting resistor and complete the circuit.
+ */
+function ledQuizStarter(): CircuitPreset {
+  const v1 = c('voltage_source', 200, 200, { value: 5, label: 'V1' })
+  const led = c('led', 560, 200, { label: 'LED1' })
+  const gnd = c('ground', 200, 380, { label: 'GND1' })
+  return {
+    components: [v1, led, gnd],
+    wires: []
+  }
+}
+
+/**
+ * Circuit quiz starter: 12V source + voltmeter pre-placed, no resistors or wires.
+ * Learner must build a voltage divider to produce ~4V at the voltmeter.
+ */
+function dividerQuizStarter(): CircuitPreset {
+  const v1 = c('voltage_source', 200, 200, { value: 12, label: 'V1' })
+  const vm = c('voltmeter', 560, 280, { label: 'VM1' })
+  const gnd = c('ground', 200, 380, { label: 'GND1' })
+  return {
+    components: [v1, vm, gnd],
+    wires: []
+  }
+}
+
+// ── Circuit quiz card authors ─────────────────────────────────────────────────
+
+const ledCircuitQuiz: CircuitQuizCard = {
+  type: 'circuit_quiz',
+  question: 'Wire the LED circuit so it lights up safely.',
+  instructions:
+    'A 5 V supply and an LED are already placed. Add a current-limiting resistor (try 220 Ω–470 Ω) and connect everything so the LED conducts between 10 mA and 30 mA. Do not forget a ground connection!',
+  starterCircuit: ledQuizStarter(),
+  allowedComponents: ['resistor', 'wire_node', 'ground'],
+  conditions: [
+    { type: 'circuit_solves', label: 'Circuit must be complete — check all terminals are connected.' },
+    {
+      type: 'component_type_current',
+      componentType: 'led',
+      min: 0.010,
+      max: 0.030,
+      label: 'LED current must be between 10 mA and 30 mA — adjust your resistor value.'
+    }
+  ],
+  hints: [
+    "Ohm's Law: the resistor sees V = V_supply − V_LED ≈ 5 − 2 = 3 V. At 15 mA, R = 3 ÷ 0.015 = 200 Ω. Try 220 Ω.",
+    'Make sure every component terminal is connected. The LED has an anode (+) and cathode (−) — current flows from anode to cathode.'
+  ],
+  explanation:
+    'A 220 Ω resistor gives (5 − 1.9) ÷ 220 ≈ 14 mA — safely inside the 10–30 mA window. Too low a resistor burns the LED; too high and it barely glows.'
+}
+
+const dividerCircuitQuiz: CircuitQuizCard = {
+  type: 'circuit_quiz',
+  question: 'Build a voltage divider that outputs approximately 4 V.',
+  instructions:
+    'A 12 V supply and a voltmeter are pre-placed. Add two resistors in series to create a voltage divider, and connect the voltmeter across the lower resistor so it reads between 3.5 V and 4.5 V. Ground the negative terminal of the supply.',
+  starterCircuit: dividerQuizStarter(),
+  allowedComponents: ['resistor', 'wire_node', 'ground'],
+  conditions: [
+    { type: 'circuit_solves', label: 'Circuit must be complete — check all terminals are connected.' },
+    {
+      type: 'voltmeter_reads',
+      min: 3.5,
+      max: 4.5,
+      label: 'Voltmeter must read between 3.5 V and 4.5 V — adjust your resistor ratio.'
+    }
+  ],
+  hints: [
+    'For ~4 V from 12 V, the lower resistor must be ⅓ of the total: e.g. 1 kΩ + 2 kΩ gives V_out = 12 × (1000 ÷ 3000) = 4 V.',
+    'Connect the voltmeter across the lower resistor. Terminal 0 goes to the top of the lower resistor, terminal 1 to ground.'
+  ],
+  explanation:
+    'A 1 kΩ / 2 kΩ divider gives exactly 4 V. Any pair where R_lower ÷ R_total ≈ ⅓ works — e.g. 470 Ω + 1 kΩ (≈ 3.8 V) or 1 kΩ + 2.2 kΩ (≈ 3.75 V).'
 }
 
 // ── Lessons ──────────────────────────────────────────────────────────────────
@@ -377,7 +456,8 @@ Try swapping the resistor values and predicting the new reading before you look.
         choices: ['9 V', '6 V', '4.5 V', '3 V'],
         answerIndex: 3,
         explanation: 'I = 9 ÷ 3000 = 3 mA. V across 1 kΩ = 0.003 × 1000 = 3 V (one third of the supply for one third of the resistance).'
-      }
+      },
+      dividerCircuitQuiz
     ]
   },
   {
@@ -503,7 +583,8 @@ Try lowering R1 to 100 Ω and watch the current rise. In a real circuit, going m
         choices: ['23 mA', '14 mA', '2 mA', '90 mA'],
         answerIndex: 1,
         explanation: 'The resistor sees 5 − 2 = 3 V, so I = 3 ÷ 220 ≈ 13.6 mA ≈ 14 mA.'
-      }
+      },
+      ledCircuitQuiz
     ]
   },
   // ── dc-ohm-2: Power & Energy ────────────────────────────────────────────────

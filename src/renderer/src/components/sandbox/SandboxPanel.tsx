@@ -1,5 +1,7 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useCircuitStore } from '@stores/circuitStore'
+import { useLessonStore } from '@stores/lessonStore'
+import { useUIStore } from '@stores/uiStore'
 import { useSimulation } from '../../hooks/useSimulation'
 import {
   deleteCircuit,
@@ -10,6 +12,7 @@ import {
   saveCircuit
 } from '../../lib/circuitFiles'
 import type { ComponentType } from '../../sim/elements'
+import { validateCircuitQuiz } from '../../lessons/validation'
 import Palette from './Palette'
 import CircuitCanvas from './CircuitCanvas'
 import Inspector from './Inspector'
@@ -29,6 +32,41 @@ export default function SandboxPanel(): JSX.Element {
   const simResult = useCircuitStore((s) => s.simResult)
   const clearCircuit = useCircuitStore((s) => s.clearCircuit)
   const loadCircuitData = useCircuitStore((s) => s.loadCircuitData)
+
+  const activeCircuitQuiz = useUIStore((s) => s.activeCircuitQuiz)
+  const setCircuitQuizResult = useUIStore((s) => s.setCircuitQuizResult)
+  const clearCircuitQuiz = useUIStore((s) => s.clearCircuitQuiz)
+  const setActivePanel = useUIStore((s) => s.setActivePanel)
+  const recordCircuitQuizResult = useLessonStore((s) => s.recordCircuitQuizResult)
+
+  // When a circuit quiz starts, load the starter circuit (if any) into the canvas.
+  useEffect(() => {
+    if (activeCircuitQuiz) {
+      const starter = activeCircuitQuiz.card.starterCircuit
+      if (starter) {
+        loadCircuitData(starter.components, starter.wires)
+      } else {
+        clearCircuit()
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCircuitQuiz?.card])
+
+  const handleCheckAnswer = (): void => {
+    if (!activeCircuitQuiz) return
+    const { passed, failures } = validateCircuitQuiz(
+      components,
+      wires,
+      activeCircuitQuiz.card.conditions
+    )
+    setCircuitQuizResult(passed, failures)
+    recordCircuitQuizResult(activeCircuitQuiz.lessonId, activeCircuitQuiz.cardIndex, passed)
+  }
+
+  const handleReturnToLesson = (): void => {
+    clearCircuitQuiz()
+    setActivePanel('lessons')
+  }
 
   const onPlaced = useCallback(() => setPendingType(null), [])
 
@@ -81,7 +119,7 @@ export default function SandboxPanel(): JSX.Element {
 
   const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const file = e.target.files?.[0]
-    e.target.value = '' // allow re-importing the same file
+    e.target.value = ''
     if (!file) return
     const reader = new FileReader()
     reader.onload = () => {
@@ -207,9 +245,73 @@ export default function SandboxPanel(): JSX.Element {
         </button>
       </div>
 
+      {/* Quiz Mode Banner */}
+      {activeCircuitQuiz && (
+        <div className="shrink-0 border-b border-brand-yellow/40 bg-brand-yellow/5 dark:bg-brand-yellow/10 px-4 py-3 flex flex-col gap-2">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                {activeCircuitQuiz.card.question}
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                {activeCircuitQuiz.card.instructions}
+              </p>
+            </div>
+            <button
+              onClick={handleReturnToLesson}
+              className="shrink-0 text-xs px-2 py-1 rounded text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/10"
+            >
+              ← Return to lesson
+            </button>
+          </div>
+
+          {/* Result feedback */}
+          {activeCircuitQuiz.attempts > 0 && (
+            <div>
+              {activeCircuitQuiz.passed ? (
+                <p className="text-sm font-semibold text-green-600 dark:text-green-400">
+                  ✓ Circuit looks good! {activeCircuitQuiz.card.explanation}
+                </p>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  {activeCircuitQuiz.failures.map((f) => (
+                    <p key={f} className="text-xs text-red-600 dark:text-red-400">
+                      ✗ {f}
+                    </p>
+                  ))}
+                </div>
+              )}
+              {!activeCircuitQuiz.passed &&
+                activeCircuitQuiz.card.hints &&
+                activeCircuitQuiz.card.hints
+                  .slice(0, activeCircuitQuiz.attempts)
+                  .map((hint, i) => (
+                    <p key={i} className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                      \U0001f4a1 {hint}
+                    </p>
+                  ))}
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              onClick={handleCheckAnswer}
+              disabled={activeCircuitQuiz.passed}
+              className="px-4 py-1.5 text-sm font-medium rounded bg-brand-yellow text-brand-dark hover:bg-brand-yellow/90 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {activeCircuitQuiz.passed ? 'Passed ✓' : 'Check Answer'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main area */}
       <div className="flex flex-1 min-h-0">
-        <Palette pendingType={pendingType} onPick={setPendingType} />
+        <Palette
+          pendingType={pendingType}
+          onPick={setPendingType}
+          allowedTypes={activeCircuitQuiz?.card.allowedComponents}
+        />
         <div className="flex-1 min-w-0 relative">
           <CircuitCanvas
             pendingType={pendingType}

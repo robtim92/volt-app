@@ -28,6 +28,60 @@ function ProgressBar({ value, max }: { value: number; max: number }): JSX.Elemen
   )
 }
 
+// ── Needs Review section ──────────────────────────────────────────────────────
+
+function NeedsReviewSection(): JSX.Element | null {
+  const progress = useLessonStore((s) => s.progress)
+  const setActiveLesson = useLessonStore((s) => s.setActiveLesson)
+  const setActivePanel = useUIStore((s) => s.setActivePanel)
+  const dcLessons = getLessonsForTrack('dc')
+
+  const needsReview = dcLessons.filter(
+    (l) => progress[l.id]?.completed && (progress[l.id]?.lastQuizScore ?? 100) < 70
+  )
+
+  if (needsReview.length === 0) return null
+
+  const openLesson = (id: string): void => {
+    setActiveLesson(id)
+    setActivePanel('lessons')
+  }
+
+  return (
+    <div className="mb-10">
+      <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">Needs Review</h2>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+        You scored below 70% on these — worth a second look.
+      </p>
+      <div className="flex flex-col gap-2">
+        {needsReview.map((lesson) => {
+          const score = progress[lesson.id]?.lastQuizScore
+          return (
+            <button
+              key={lesson.id}
+              onClick={() => openLesson(lesson.id)}
+              className="flex items-center gap-3 px-4 py-3 rounded-lg border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 text-left hover:border-amber-400 dark:hover:border-amber-500/70 transition-colors group"
+            >
+              <span className="text-base shrink-0">📝</span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-medium text-gray-900 dark:text-gray-100 group-hover:text-brand-yellow transition-colors truncate">
+                  {lesson.title}
+                </span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">{lesson.module}</span>
+              </span>
+              {score !== undefined && (
+                <span className={`text-xs font-semibold shrink-0 ${scoreColor(score)}`}>
+                  {score}%
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ── DC track section ─────────────────────────────────────────────────────────
 
 function DCTrackSection(): JSX.Element {
@@ -162,6 +216,8 @@ export default function DashboardPanel(): JSX.Element {
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-8">
           Track your learning across all three circuits tracks.
         </p>
+
+        <NeedsReviewSection />
 
         <DCTrackSection />
 

@@ -9,9 +9,9 @@
  * Content lives in TypeScript modules for now (type-checked at build time);
  * the Phase 2–3 CMS will emit the same shapes as JSON.
  */
-import type { CircuitComponent, Wire } from '../sim/elements'
+import type { CircuitComponent, ComponentType, Wire } from '../sim/elements'
 
-export type { CircuitComponent, Wire }
+export type { CircuitComponent, ComponentType, Wire }
 
 export type TrackId = 'dc' | 'ac' | 'digital'
 
@@ -39,7 +39,34 @@ export interface QuizCard {
   explanation: string
 }
 
-export type LessonCard = ConceptCard | QuizCard
+export type CircuitConditionType =
+  | 'circuit_solves'
+  | 'component_type_current'
+  | 'voltmeter_reads'
+  | 'component_present'
+  | 'component_absent'
+
+export interface CircuitCondition {
+  type: CircuitConditionType
+  componentType?: ComponentType
+  min?: number
+  max?: number
+  count?: number
+  label: string
+}
+
+export interface CircuitQuizCard {
+  type: 'circuit_quiz'
+  question: string
+  instructions: string
+  starterCircuit?: CircuitPreset
+  allowedComponents?: ComponentType[]
+  conditions: CircuitCondition[]
+  hints?: string[]
+  explanation: string
+}
+
+export type LessonCard = ConceptCard | QuizCard | CircuitQuizCard
 
 export interface Lesson {
   id: string
