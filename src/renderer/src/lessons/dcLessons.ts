@@ -114,6 +114,73 @@ function ledPreset(): CircuitPreset {
   }
 }
 
+/** 12V source, 470Ω resistor, ammeter — for demonstrating power dissipation. */
+function powerPreset(): CircuitPreset {
+  const v1 = c('voltage_source', 180, 160, { value: 12, label: 'V1' })
+  const am = c('ammeter', 400, 160, { label: 'AM1' })
+  const r1 = c('resistor', 620, 160, { value: 470, label: 'R1' })
+  const gnd = c('ground', 180, 320, { label: 'GND1' })
+  return {
+    components: [v1, am, r1, gnd],
+    wires: [
+      w(v1, 0, am, 0),
+      w(am, 1, r1, 0),
+      w(r1, 1, v1, 1),
+      w(v1, 1, gnd, 0)
+    ]
+  }
+}
+
+/**
+ * 12V source, 2kΩ series resistor, then 3kΩ ∥ 6kΩ — for demonstrating KVL
+ * and KCL. I_main = 3 mA; splits to 2 mA (R2) + 1 mA (R3).
+ */
+function kirchhoffPreset(): CircuitPreset {
+  const v1 = c('voltage_source', 180, 260, { value: 12, label: 'V1' })
+  const am1 = c('ammeter', 340, 260, { label: 'AM1' })
+  const r1 = c('resistor', 500, 260, { value: 2000, label: 'R1' })
+  const j = c('wire_node', 660, 260, { label: 'J1' })
+  const r2 = c('resistor', 780, 160, { value: 3000, label: 'R2' })
+  const r3 = c('resistor', 780, 360, { value: 6000, label: 'R3' })
+  const gnd = c('ground', 180, 440, { label: 'GND1' })
+  return {
+    components: [v1, am1, r1, j, r2, r3, gnd],
+    wires: [
+      w(v1, 0, am1, 0),
+      w(am1, 1, r1, 0),
+      w(r1, 1, j, 0),
+      w(j, 0, r2, 0),
+      w(j, 0, r3, 0),
+      w(r2, 1, v1, 1),
+      w(r3, 1, v1, 1),
+      w(v1, 1, gnd, 0)
+    ]
+  }
+}
+
+/**
+ * 5V source, 10kΩ resistor, capacitor (DC = open), voltmeter across cap.
+ * Shows the DC steady state: capacitor fully charged to ~5V, no current flows.
+ */
+function rcPreset(): CircuitPreset {
+  const v1 = c('voltage_source', 180, 200, { value: 5, label: 'V1' })
+  const r1 = c('resistor', 400, 200, { value: 10000, label: 'R1' })
+  const cap = c('capacitor', 620, 200, { value: 100e-6, label: 'C1' })
+  const vm = c('voltmeter', 620, 340, { label: 'VM1' })
+  const gnd = c('ground', 180, 380, { label: 'GND1' })
+  return {
+    components: [v1, r1, cap, vm, gnd],
+    wires: [
+      w(v1, 0, r1, 0),
+      w(r1, 1, cap, 0),
+      w(cap, 1, v1, 1),
+      w(vm, 0, cap, 0),
+      w(vm, 1, cap, 1),
+      w(v1, 1, gnd, 0)
+    ]
+  }
+}
+
 // ── Lessons ──────────────────────────────────────────────────────────────────
 
 export const DC_LESSONS: Lesson[] = [
@@ -436,6 +503,231 @@ Try lowering R1 to 100 Ω and watch the current rise. In a real circuit, going m
         choices: ['23 mA', '14 mA', '2 mA', '90 mA'],
         answerIndex: 1,
         explanation: 'The resistor sees 5 − 2 = 3 V, so I = 3 ÷ 220 ≈ 13.6 mA ≈ 14 mA.'
+      }
+    ]
+  },
+  // ── dc-ohm-2: Power & Energy ────────────────────────────────────────────────
+  {
+    id: 'dc-ohm-2',
+    track: 'dc',
+    module: "Ohm's Law & Power",
+    title: 'Power & Energy',
+    summary: "Every flowing electron gives up energy somewhere — here's how to calculate where and how much.",
+    estMinutes: 9,
+    cards: [
+      {
+        type: 'concept',
+        title: 'Power is energy per second',
+        body: `When current flows through a resistor, electrical energy converts to heat. Power tells you how fast — measured in watts (W), where one watt equals one joule per second.
+
+The fundamental formula:
+
+P = V × I
+
+Power equals voltage times current. A circuit at 5 V drawing 100 mA dissipates 5 × 0.1 = 0.5 W. A microcontroller might use 0.05 W; your laptop charger delivers ~60 W; a kettle pulls ~2000 W.`
+      },
+      {
+        type: 'concept',
+        title: 'Two more useful forms',
+        body: `Combine P = V × I with Ohm's Law (V = I × R) and you get two more arrangements:
+
+P = I² × R — use when you know the current through the component.
+P = V² ÷ R — use when you know the voltage across it.
+
+All three give the same answer; pick whichever requires the fewest steps. Designing a current-limiting resistor? Use I²R. Checking a divider output? Use V²/R.`
+      },
+      {
+        type: 'concept',
+        title: 'Power ratings and heat',
+        body: `Every physical resistor has a maximum power rating — the most heat it can dissipate without damage. Common values: ⅛ W, ¼ W, ½ W, 1 W. Rule of thumb: derate to 50% of rating for long-term reliability.
+
+The circuit below: 12 V across a 470 Ω resistor, with an ammeter confirming the current. The ammeter reads ~25.5 mA.
+
+P = I² × R = (0.0255)² × 470 ≈ 0.31 W
+
+A standard ¼ W (0.25 W) resistor would be over its limit here. You'd need at least a ½ W part. The simulator doesn't smoke — real ones do.`,
+        circuitLabel: 'Open the power dissipation circuit',
+        circuit: powerPreset()
+      },
+      {
+        type: 'quiz',
+        question: 'A 9 V supply drives a circuit drawing 30 mA. How much power is dissipated?',
+        choices: ['2.7 W', '270 mW', '27 mW', '0.27 mW'],
+        answerIndex: 1,
+        explanation: 'P = V × I = 9 × 0.030 = 0.27 W = 270 mW.'
+      },
+      {
+        type: 'quiz',
+        question: 'A 470 Ω resistor carries 25 mA. What power does it dissipate?',
+        choices: ['11.75 W', '293.75 mW', '29.4 mW', '118 mW'],
+        answerIndex: 1,
+        explanation: 'P = I² × R = (0.025)² × 470 = 0.000625 × 470 ≈ 0.294 W ≈ 294 mW.'
+      },
+      {
+        type: 'quiz',
+        question: '7 V appears across a 330 Ω resistor. Can a ¼ W (0.25 W) resistor handle it safely?',
+        choices: [
+          'Yes — it dissipates about 148 mW, comfortably under 250 mW',
+          'No — the power exceeds the rating',
+          'Yes, but only briefly before it overheats',
+          'Only if it is a metal-film type'
+        ],
+        answerIndex: 0,
+        explanation: 'P = V² ÷ R = 49 ÷ 330 ≈ 0.148 W = 148 mW, which is below the 250 mW rating. (Though 148/250 ≈ 59% — just above the 50% derating rule, so a ½ W part would be the professional choice.)'
+      }
+    ]
+  },
+  // ── dc-kirckhoff-1: Kirchhoff's Laws ────────────────────────────────────────
+  {
+    id: 'dc-kirckhoff-1',
+    track: 'dc',
+    module: "Kirchhoff's Laws",
+    title: "Kirchhoff's Laws",
+    summary: 'Two rules — one about voltages around a loop, one about currents at a node — that unlock any circuit.',
+    estMinutes: 12,
+    cards: [
+      {
+        type: 'concept',
+        title: 'KVL: the voltage law',
+        body: `Kirchhoff's Voltage Law (KVL): the sum of all voltages around any closed loop is exactly zero.
+
+This is just conservation of energy. Travelling around a loop, voltage rises across sources and falls across resistors. When you arrive back where you started, the net change must be zero — you can't gain or lose energy going in a circle.
+
+Example: a 9 V source, a 1 kΩ drop of 3 V, and a 2 kΩ drop of 6 V.
+Loop sum: +9 − 3 − 6 = 0 ✓
+
+KVL lets you write equations for unknown voltages in any loop. It works even in circuits too complex to solve by inspection.`
+      },
+      {
+        type: 'concept',
+        title: 'KCL: the current law',
+        body: `Kirchhoff's Current Law (KCL): the sum of all currents entering a node equals the sum of all currents leaving.
+
+This is conservation of charge: electrons don't accumulate or vanish at a junction. Whatever flows in must flow out.
+
+Example: 5 mA arrives at a node. Two branches leave. If one carries 3 mA, the other must carry 2 mA.
+
+Together, KVL and KCL are the foundation of all circuit analysis. Every technique — voltage dividers, Thevenin equivalents, op-amp analysis — is KVL and KCL applied systematically.`
+      },
+      {
+        type: 'concept',
+        title: 'Both laws working together',
+        body: `The circuit below: 12 V source, 2 kΩ in series (R1), then 3 kΩ (R2) and 6 kΩ (R3) in parallel.
+
+KCL at the junction: the ammeter on the main branch reads 3 mA. This splits: 2 mA through R2 (6 V ÷ 3 kΩ) and 1 mA through R3 (6 V ÷ 6 kΩ). Total leaving = 3 mA = total entering ✓
+
+KVL around the outer loop: +12 − (3 mA × 2 kΩ) − (2 mA × 3 kΩ) = 12 − 6 − 6 = 0 ✓
+
+Try adding a voltmeter across R1 and R2 separately and verify the drops add to 12 V.`,
+        circuitLabel: 'Open the KVL/KCL circuit',
+        circuit: kirchhoffPreset()
+      },
+      {
+        type: 'quiz',
+        question: 'A series loop has a 12 V source, R1 dropping 7 V, and R2. What does R2 drop?',
+        choices: ['7 V', '5 V', '12 V', 'Not determinable without knowing R2'],
+        answerIndex: 1,
+        explanation: 'KVL: voltages around the loop sum to zero. +12 − 7 − V_R2 = 0, so V_R2 = 5 V. You do not need to know the resistance values.'
+      },
+      {
+        type: 'quiz',
+        question: '10 mA flows into a junction. Branch A carries 4 mA and branch B carries 3 mA. Branch C carries…',
+        choices: ['10 mA', '7 mA', '3 mA', '1 mA'],
+        answerIndex: 2,
+        explanation: 'KCL: currents in = currents out. 10 = 4 + 3 + I_C, so I_C = 3 mA.'
+      },
+      {
+        type: 'quiz',
+        question: 'Why do KVL and KCL always hold, regardless of circuit complexity?',
+        choices: [
+          'They are empirical rules that work well for low-frequency circuits',
+          'KVL follows from conservation of energy; KCL from conservation of charge',
+          'They are defined by the IEEE component standard',
+          'They only hold for resistive circuits with DC sources'
+        ],
+        answerIndex: 1,
+        explanation: "KVL: you can't gain net energy traversing a closed path (conservation of energy). KCL: charge can't appear or disappear at a node (conservation of charge). Both hold at all frequencies in lumped-circuit analysis."
+      }
+    ]
+  },
+  // ── dc-rc-1: RC & RL Time Constants ─────────────────────────────────────────
+  {
+    id: 'dc-rc-1',
+    track: 'dc',
+    module: 'Reactive Components',
+    title: 'RC & RL Time Constants',
+    summary: "Capacitors and inductors don't respond instantly — they follow a predictable exponential curve.",
+    estMinutes: 12,
+    cards: [
+      {
+        type: 'concept',
+        title: 'Capacitors store charge',
+        body: `A capacitor is two conductive plates separated by an insulator. Applying voltage pushes charge onto the plates — positive on one side, negative on the other. The stored charge creates a voltage that opposes the source: the capacitor "pushes back."
+
+Key relationship: Q = C × V — charge (coulombs) equals capacitance (farads) times voltage.
+
+Unlike a resistor, a fully charged capacitor blocks DC current entirely. But while it's charging or discharging, current definitely flows. This makes capacitors essential for timing, filtering, and energy storage.`
+      },
+      {
+        type: 'concept',
+        title: 'The RC time constant',
+        body: `How fast a capacitor charges depends on how much resistance limits the charging current. The time constant τ (tau) captures this in one product:
+
+τ = R × C    (ohms × farads = seconds)
+
+The charging curve after connecting a source:
+V(t) = V_s × (1 − e^(−t/τ))
+
+At t = 1τ: charged to 63% of supply (1 − 1/e ≈ 0.632)
+At t = 2τ: 86%
+At t = 3τ: 95%
+At t = 5τ: 99.3% — considered "fully charged" in practice
+
+A 10 kΩ resistor and a 100 μF capacitor: τ = 10,000 × 0.0001 = 1 second.`
+      },
+      {
+        type: 'concept',
+        title: 'Steady state in the simulator',
+        body: `The Volt simulator solves DC steady state — the condition long after everything has settled. For a capacitor, this means fully charged: it acts as an open circuit and the full source voltage appears across it.
+
+The circuit below: 5 V through 10 kΩ into a 100 μF capacitor. In steady state, no current flows and the voltmeter reads ~5 V — the stored voltage on the capacitor plates.
+
+The charging transient (the curve from 0 V to 5 V over ~5 seconds) requires time-domain simulation. That's coming in the AC track, where you'll use an oscilloscope to watch the waveform in real time.`,
+        circuitLabel: 'Open the RC circuit (steady state)',
+        circuit: rcPreset()
+      },
+      {
+        type: 'concept',
+        title: 'Inductors and RL circuits',
+        body: `An inductor is a coil of wire that stores energy in a magnetic field. It is the dual of a capacitor: where a capacitor opposes changes in voltage, an inductor opposes changes in current.
+
+The RL time constant: τ = L ÷ R (henries ÷ ohms = seconds)
+
+At switch-on (t = 0): the inductor acts like an open circuit — current starts at zero.
+At steady state (t >> τ): the inductor is a short circuit (a plain wire) — full current flows, limited only by resistance.
+
+In the DC simulator, an inductor always shows its final, fully-conducting state. The characteristic rise curve is, again, a topic for time-domain simulation.`
+      },
+      {
+        type: 'quiz',
+        question: 'R = 22 kΩ, C = 47 μF. What is the RC time constant?',
+        choices: ['47 ms', '1.034 s', '2.13 ms', '470 s'],
+        answerIndex: 1,
+        explanation: 'τ = R × C = 22,000 × 0.000047 = 1.034 s.'
+      },
+      {
+        type: 'quiz',
+        question: 'After exactly one time constant, a capacitor charging toward 12 V has reached approximately…',
+        choices: ['6 V (50%)', '7.6 V (63%)', '11.4 V (95%)', '3 V (25%)'],
+        answerIndex: 1,
+        explanation: 'After 1τ: V = V_s × (1 − 1/e) ≈ 0.632 × 12 ≈ 7.6 V. The "63% after one tau" figure is worth memorising.'
+      },
+      {
+        type: 'quiz',
+        question: 'You need a 500 ms time constant. You have a 10 μF capacitor. What resistor do you need?',
+        choices: ['5 kΩ', '50 kΩ', '500 kΩ', '5 MΩ'],
+        answerIndex: 1,
+        explanation: 'τ = R × C → R = τ ÷ C = 0.5 ÷ 0.000010 = 50,000 Ω = 50 kΩ.'
       }
     ]
   }

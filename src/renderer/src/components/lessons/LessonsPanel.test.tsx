@@ -80,7 +80,10 @@ describe('LessonsPanel — player', () => {
     expect(progress?.completed).toBe(true)
     // answered 1 of 3 quizzes correctly (the others unanswered) → 33%
     expect(progress?.lastQuizScore).toBe(33)
-    // back on the list view
+
+    // score < 70%: completion screen shows the nudge; click "Continue anyway"
+    expect(screen.getByText(/below 70%/i)).toBeInTheDocument()
+    await user.click(screen.getByText(/Continue anyway/i))
     expect(useLessonStore.getState().activeLessonId).toBeNull()
   })
 

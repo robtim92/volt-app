@@ -101,11 +101,92 @@
 - CMS/admin panel v1 (card editor, lab configurator) — start late in phase, finish in Phase 3 if needed
 
 ### Phase 3 — Quiz System + Dashboard + AI (~6 weeks)
-- Quiz engine: multiple choice, numeric, circuit completion, T/F with explanation; instant feedback; soft-gate nudge
+- Quiz engine: multiple choice, numeric, **circuit completion** (see design below), T/F with explanation; instant feedback; soft-gate nudge (<70% score → review prompt, never hard-blocks)
 - DC quizzes authored; spaced-repetition review scheduling
 - Dashboard: per-track progress, lesson map (node graph), streak, quiz accuracy by topic
 - Success-metrics instrumentation (quiz improvement over time; sandbox session length/complexity)
 - **AI assistant (paid add-on):** Claude Haiku chat panel, circuit-state context injection, lesson RAG (build-time embeddings), debug/tutor modes, offline hiding, upgrade prompt for non-subscribers; API key proxy in Electron main process / lightweight serverless proxy for web
+
+#### Circuit-Completion Quiz Design (Phase 3)
+
+A `CircuitQuizCard` opens an embedded mini-sandbox inside the lesson card. The learner builds or modifies a circuit, then hits **Check Answer**. The solver runs and the result is validated against a set of declarative conditions authored alongside the lesson content. All conditions must pass for the card to be marked complete.
+
+**Schema (`lessons/types.ts` additions):**
+
+```typescript
+export type CircuitConditionType =
+  | 'circuit_solves'         // circuit must form a complete, solvable loop
+  | 'element_current'        // I through a fixed element ID within [min, max]
+  | 'component_type_current' // I through any component of a given type within [min, max]
+  | 'component_present'      // circuit must contain ≥ count of a given ComponentType
+  | 'component_absent'       // circuit must NOT contain a given ComponentType
+
+export interface CircuitCondition {
+  type: CircuitConditionType
+  elementId?: string          // for 'element_current' — references a preset component ID
+  componentType?: string      // for 'component_type_current', 'component_present', 'component_absent'
+  min?: number                // lower bound (A for current checks)
+  max?: number                // upper bound (A for current checks)
+  count?: number              // minimum count (default 1) for 'component_present'
+  label: string               // shown in failure feedback, e.g. "LED must be lit (> 10 mA)"
+}
+
+export interface CircuitQuizCard {
+  type: 'circuit_quiz'
+  question: string            // shown above the mini-sandbox
+  instructions: string        // step-by-step task description
+  starterCircuit?: CircuitPreset   // optional pre-wired starting circuit
+  allowedComponents?: ComponentType[]  // if set, restricts the palette
+  conditions: CircuitCondition[]   // ALL must pass
+  hints?: string[]            // revealed one per failed attempt
+  explanation: string         // shown after successful completion
+}
+```
+
+**Why reference by element current rather than node voltage?**
+Node names in the solver come from the union-find netlist builder and are not stable across user edits. Element IDs from the starter `CircuitPreset` are stable. For elements the learner adds (where no fixed ID exists), `component_type_current` matches any component of the given type — enough for most teaching scenarios ("an LED must be conducting").
+
+**Validation function (`lessons/validation.ts`):**
+
+```typescript
+export function validateCircuitQuiz(
+  components: CircuitComponent[],
+  wires: Wire[],
+  conditions: CircuitCondition[]
+): { passed: boolean; failures: string[] }
+```
+
+Internally: `buildNetlist(components, wires)` → `solveDC(netlist)` → evaluate each condition. Returns the list of `label` strings for failed conditions so the UI can display specific, actionable feedback ("LED must be lit — check your current-limiting resistor").
+
+**UI flow:**
+1. Card loads → embedded mini-sandbox initialises with `starterCircuit` (if any); palette restricted to `allowedComponents` (if set).
+2. Learner places components, draws wires.
+3. **Check Answer** → runs `validateCircuitQuiz`; on pass: confetti + explanation; on fail: shows failure labels + reveals next hint if available.
+4. No attempt limit — learner can try as many times as needed.
+5. Card counted as complete on first passing attempt; quiz score counts only first attempt for the soft-gate calculation.
+
+**Content-integrity test:** every `CircuitQuizCard`'s `starterCircuit` (if present) must `solveDC()` successfully, same as existing `ConceptCard` preset tests. The conditions themselves are validated for schema correctness at test time (all referenced `elementId`s must exist in the starter circuit).
+
+**Example authored card:**
+```typescript
+{
+  type: 'circuit_quiz',
+  question: 'Wire the circuit so the LED lights up safely.',
+  instructions: 'Connect the 9 V source, a current-limiting resistor (pick the right value!), and the LED. The LED needs between 10 mA and 30 mA to light.',
+  starterCircuit: ledQuizStarter(), // 9V source + LED pre-placed, no wires
+  allowedComponents: ['resistor', 'wire_node', 'ground'],
+  conditions: [
+    { type: 'circuit_solves', label: 'Circuit must be complete with no open loops' },
+    { type: 'component_type_current', componentType: 'led', min: 0.010, max: 0.030,
+      label: 'LED current must be between 10 mA and 30 mA' }
+  ],
+  hints: [
+    'Ohm\'s Law: V = I × R. What voltage is across the resistor?',
+    'With 9 V supply and ~2 V LED drop, the resistor sees ~7 V. At 20 mA, R = 7 / 0.02 = 350 Ω. Pick the nearest standard value.'
+  ],
+  explanation: 'A 390 Ω resistor gives ~17.9 mA — well within the safe range. Going lower risks burning out the LED; going much higher makes it too dim.'
+}
+```
 
 ### Phase 4 — AC Track (~8 weeks)
 - Phasor-domain solver (complex impedance R/L/C); time-domain waveform reconstruction

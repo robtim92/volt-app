@@ -91,6 +91,70 @@ function LessonList(): JSX.Element {
   )
 }
 
+// ── Completion screen ────────────────────────────────────────────────────────
+
+function CompletionScreen({
+  lesson,
+  quizScore,
+  onBack,
+  onReview
+}: {
+  lesson: Lesson
+  quizScore: number | undefined
+  onBack: () => void
+  onReview: () => void
+}): JSX.Element {
+  const needsReview = quizScore !== undefined && quizScore < 70
+
+  return (
+    <div className="h-full flex flex-col items-center justify-center px-6 gap-6 text-center">
+      <span className="text-5xl">{needsReview ? '📝' : '🎉'}</span>
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">{lesson.title}</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Lesson complete</p>
+      </div>
+
+      {quizScore !== undefined && (
+        <div
+          className={`px-6 py-4 rounded-xl text-sm max-w-sm w-full ${
+            needsReview
+              ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+              : 'bg-green-500/10 text-green-700 dark:text-green-300'
+          }`}
+        >
+          <p className="font-semibold mb-1">Quiz score: {quizScore}%</p>
+          {needsReview && (
+            <p className="opacity-90">
+              You got below 70% — worth a quick review before moving on.
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="flex flex-col gap-2 w-full max-w-xs">
+        {needsReview && (
+          <button
+            onClick={onReview}
+            className="px-4 py-2 rounded-lg bg-brand-yellow text-brand-dark font-semibold text-sm hover:brightness-110"
+          >
+            Review lesson
+          </button>
+        )}
+        <button
+          onClick={onBack}
+          className={`px-4 py-2 rounded-lg text-sm font-semibold ${
+            needsReview
+              ? 'bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-white/20'
+              : 'bg-brand-yellow text-brand-dark hover:brightness-110'
+          }`}
+        >
+          {needsReview ? 'Continue anyway' : 'Back to lessons'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── Player view ──────────────────────────────────────────────────────────────
 
 function QuizCardView({
@@ -162,6 +226,8 @@ function LessonPlayer({ lesson }: { lesson: Lesson }): JSX.Element {
 
   // first answer per quiz card index — this is what scores
   const [answers, setAnswers] = useState<Record<number, number>>({})
+  const [showCompletion, setShowCompletion] = useState(false)
+  const [completionScore, setCompletionScore] = useState<number | undefined>(undefined)
 
   const card = lesson.cards[Math.min(cardIndex, lesson.cards.length - 1)]
   const isLast = cardIndex >= lesson.cards.length - 1
@@ -178,14 +244,31 @@ function LessonPlayer({ lesson }: { lesson: Lesson }): JSX.Element {
     const quizIndices = lesson.cards
       .map((c, i) => (c.type === 'quiz' ? i : -1))
       .filter((i) => i >= 0)
+    let score: number | undefined = undefined
     if (quizIndices.length > 0) {
       const correct = quizIndices.filter(
         (i) => answers[i] === (lesson.cards[i] as Extract<LessonCard, { type: 'quiz' }>).answerIndex
       ).length
-      recordQuizScore(lesson.id, Math.round((correct / quizIndices.length) * 100))
+      score = Math.round((correct / quizIndices.length) * 100)
+      recordQuizScore(lesson.id, score)
     }
     markLessonComplete(lesson.id)
-    setActiveLesson(null)
+    setCompletionScore(score)
+    setShowCompletion(true)
+  }
+
+  if (showCompletion) {
+    return (
+      <CompletionScreen
+        lesson={lesson}
+        quizScore={completionScore}
+        onBack={() => setActiveLesson(null)}
+        onReview={() => {
+          setShowCompletion(false)
+          setActiveCard(0)
+        }}
+      />
+    )
   }
 
   return (
