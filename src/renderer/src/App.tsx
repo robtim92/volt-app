@@ -3,6 +3,7 @@ import Sidebar from '@components/layout/Sidebar'
 import TopBar from '@components/layout/TopBar'
 import MainArea from '@components/layout/MainArea'
 import OnboardingQuiz from '@components/onboarding/OnboardingQuiz'
+import AIAssistantPanel from '@components/ai/AIAssistantPanel'
 import { useUIStore } from '@stores/uiStore'
 
 function App(): JSX.Element {
@@ -22,6 +23,7 @@ function App(): JSX.Element {
         <MainArea />
       </div>
       {!hasOnboarded && <OnboardingQuiz />}
+      <AIAssistantPanel />
     </div>
   )
 }

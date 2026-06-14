@@ -2,31 +2,13 @@ import { useUIStore } from '@stores/uiStore'
 import SandboxPanel from '@components/sandbox/SandboxPanel'
 import LessonsPanel from '@components/lessons/LessonsPanel'
 import DashboardPanel from '@components/dashboard/DashboardPanel'
-
-// Placeholder panels — replaced by real components phase by phase
-function PlaceholderPanel({ title, description }: { title: string; description: string }): JSX.Element {
-  return (
-    <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-8">
-      <span className="text-5xl">⚡</span>
-      <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100">{title}</h2>
-      <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md">{description}</p>
-      <span className="text-xs px-3 py-1 rounded-full bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400">
-        Coming in a future phase
-      </span>
-    </div>
-  )
-}
+import SettingsPanel from '@components/settings/SettingsPanel'
 
 const panels: Record<string, JSX.Element> = {
   lessons: <LessonsPanel />,
   sandbox: <SandboxPanel />,
   dashboard: <DashboardPanel />,
-  settings: (
-    <PlaceholderPanel
-      title="Settings"
-      description="Theme, unit system, formula notation, and AI assistant preferences."
-    />
-  )
+  settings: <SettingsPanel />
 }
 
 export default function MainArea(): JSX.Element {

@@ -24,6 +24,8 @@ interface UIState {
   activePanel: Panel
   sidebarOpen: boolean
   hasOnboarded: boolean
+  /** Whether the AI assistant slide-over is open (transient, not persisted). */
+  aiPanelOpen: boolean
   /** Set when the learner launches a circuit quiz from the lesson player. */
   activeCircuitQuiz: ActiveCircuitQuiz | null
 
@@ -31,6 +33,8 @@ interface UIState {
   setActiveTrack: (track: Track) => void
   setActivePanel: (panel: Panel) => void
   setSidebarOpen: (open: boolean) => void
+  setAIPanelOpen: (open: boolean) => void
+  toggleAIPanel: () => void
   completeOnboarding: () => void
   startCircuitQuiz: (lessonId: string, cardIndex: number, card: CircuitQuizCard) => void
   setCircuitQuizResult: (passed: boolean, failures: string[]) => void
@@ -46,6 +50,7 @@ export const useUIStore = create<UIState>()(
       activePanel: 'sandbox',
       sidebarOpen: true,
       hasOnboarded: false,
+      aiPanelOpen: false,
       activeCircuitQuiz: null,
 
       // Actions
@@ -53,6 +58,8 @@ export const useUIStore = create<UIState>()(
       setActiveTrack: (track) => set({ activeTrack: track }),
       setActivePanel: (panel) => set({ activePanel: panel }),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
+      setAIPanelOpen: (open) => set({ aiPanelOpen: open }),
+      toggleAIPanel: () => set((s) => ({ aiPanelOpen: !s.aiPanelOpen })),
       completeOnboarding: () => set({ hasOnboarded: true }),
       startCircuitQuiz: (lessonId, cardIndex, card) =>
         set({
