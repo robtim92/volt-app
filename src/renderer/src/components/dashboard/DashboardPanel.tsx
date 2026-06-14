@@ -229,14 +229,26 @@ function DCTrackSection(): JSX.Element {
       {/* Module breakdown */}
       {dcModules.map(({ module, lessons }) => {
         const moduleCompleted = lessons.filter((l) => progress[l.id]?.completed).length
+        const moduleScores = lessons
+          .map((l) => progress[l.id]?.lastQuizScore)
+          .filter((s): s is number => s !== undefined)
+        const moduleAvg =
+          moduleScores.length > 0
+            ? Math.round(moduleScores.reduce((a, b) => a + b, 0) / moduleScores.length)
+            : null
         return (
           <div key={module} className="mb-6">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
                 {module}
               </h3>
-              <span className="text-xs text-gray-400 dark:text-gray-500">
-                {moduleCompleted}/{lessons.length}
+              <span className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
+                {moduleAvg !== null && (
+                  <span className={`font-semibold ${scoreColor(moduleAvg)}`}>{moduleAvg}%</span>
+                )}
+                <span>
+                  {moduleCompleted}/{lessons.length}
+                </span>
               </span>
             </div>
             <div className="flex flex-col gap-1.5">
