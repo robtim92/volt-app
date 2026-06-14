@@ -32,6 +32,10 @@ export default function SandboxPanel(): JSX.Element {
   const simResult = useCircuitStore((s) => s.simResult)
   const clearCircuit = useCircuitStore((s) => s.clearCircuit)
   const loadCircuitData = useCircuitStore((s) => s.loadCircuitData)
+  const undo = useCircuitStore((s) => s.undo)
+  const redo = useCircuitStore((s) => s.redo)
+  const canUndo = useCircuitStore((s) => s.past.length > 0)
+  const canRedo = useCircuitStore((s) => s.future.length > 0)
 
   const activeCircuitQuiz = useUIStore((s) => s.activeCircuitQuiz)
   const setCircuitQuizResult = useUIStore((s) => s.setCircuitQuizResult)
@@ -236,6 +240,24 @@ export default function SandboxPanel(): JSX.Element {
           className="hidden"
           aria-label="Import circuit file"
         />
+        <button
+          onClick={undo}
+          disabled={!canUndo}
+          title="Undo (Ctrl+Z)"
+          aria-label="Undo"
+          className="px-2 py-1 text-sm rounded bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          ↶ Undo
+        </button>
+        <button
+          onClick={redo}
+          disabled={!canRedo}
+          title="Redo (Ctrl+Shift+Z)"
+          aria-label="Redo"
+          className="px-2 py-1 text-sm rounded bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          ↷ Redo
+        </button>
         <button
           onClick={clearCircuit}
           disabled={components.length === 0}

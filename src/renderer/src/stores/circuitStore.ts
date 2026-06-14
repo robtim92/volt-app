@@ -17,23 +17,72 @@ export interface SimulationResult {
   error?: string
 }
 
+/** Undo/redo snapshot — only the circuit graph, not transient UI/sim state. */
+interface Snapshot {
+  components: CircuitComponent[]
+  wires: Wire[]
+}
+
+const HISTORY_LIMIT = 50
+
 interface CircuitState {
   components: CircuitComponent[]
   wires: Wire[]
   simResult: SimulationResult | null
-  selectedComponentId: string | null
 
+  // ── Selection ──
+  /** Primary selected component (drives the single-component Inspector). */
+  selectedComponentId: string | null
+  /** All selected components (marquee / multi-select). */
+  selectedIds: string[]
+  /** Selected wire, for the net (voltage/current) preview. */
+  selectedWireId: string | null
+
+  // ── Undo/redo ──
+  past: Snapshot[]
+  future: Snapshot[]
+
+  // ── Mutations ──
   addComponent: (component: CircuitComponent) => void
   removeComponent: (id: string) => void
+  removeComponents: (ids: string[]) => void
   updateComponent: (id: string, patch: Partial<CircuitComponent>) => void
   toggleSwitch: (id: string) => void
   addWire: (wire: Wire) => void
   removeWire: (id: string) => void
   setSimResult: (result: SimulationResult | null) => void
-  selectComponent: (id: string | null) => void
   clearCircuit: () => void
   /** Replace the whole circuit (used by load/import) */
   loadCircuitData: (components: CircuitComponent[], wires: Wire[]) => void
+
+  // ── Selection actions ──
+  selectComponent: (id: string | null) => void
+  setSelection: (ids: string[]) => void
+  selectWire: (id: string | null) => void
+  clearSelection: () => void
+
+  // ── History actions ──
+  /** Push the current graph onto the undo stack (call before a drag / edit). */
+  checkpoint: () => void
+  undo: () => void
+  redo: () => void
+}
+
+const snap = (s: { components: CircuitComponent[]; wires: Wire[] }): Snapshot => ({
+  components: s.components,
+  wires: s.wires
+})
+
+/** Returns the history fields for a mutating action: push current onto past, clear future. */
+const pushPast = (s: CircuitState): Pick<CircuitState, 'past' | 'future'> => ({
+  past: [...s.past, snap(s)].slice(-HISTORY_LIMIT),
+  future: []
+})
+
+const clearedSelection = {
+  selectedComponentId: null,
+  selectedIds: [] as string[],
+  selectedWireId: null
 }
 
 export const useCircuitStore = create<CircuitState>()((set) => ({
@@ -41,17 +90,39 @@ export const useCircuitStore = create<CircuitState>()((set) => ({
   wires: [],
   simResult: null,
   selectedComponentId: null,
+  selectedIds: [],
+  selectedWireId: null,
+  past: [],
+  future: [],
 
   addComponent: (component) =>
-    set((s) => ({ components: [...s.components, component] })),
+    set((s) => ({ ...pushPast(s), components: [...s.components, component] })),
 
   removeComponent: (id) =>
     set((s) => ({
+      ...pushPast(s),
       components: s.components.filter((c) => c.id !== id),
       wires: s.wires.filter((w) => w.fromComponentId !== id && w.toComponentId !== id),
-      selectedComponentId: s.selectedComponentId === id ? null : s.selectedComponentId
+      selectedComponentId: s.selectedComponentId === id ? null : s.selectedComponentId,
+      selectedIds: s.selectedIds.filter((sid) => sid !== id)
     })),
 
+  removeComponents: (ids) =>
+    set((s) => {
+      if (ids.length === 0) return {}
+      const idSet = new Set(ids)
+      return {
+        ...pushPast(s),
+        components: s.components.filter((c) => !idSet.has(c.id)),
+        wires: s.wires.filter(
+          (w) => !idSet.has(w.fromComponentId) && !idSet.has(w.toComponentId)
+        ),
+        ...clearedSelection
+      }
+    }),
+
+  // Note: no history push — used continuously during drags. Callers that want an
+  // undoable edit (inspector value/rotate, drag start) call checkpoint() first.
   updateComponent: (id, patch) =>
     set((s) => ({
       components: s.components.map((c) => (c.id === id ? { ...c, ...patch } : c))
@@ -59,6 +130,7 @@ export const useCircuitStore = create<CircuitState>()((set) => ({
 
   toggleSwitch: (id) =>
     set((s) => ({
+      ...pushPast(s),
       components: s.components.map((c) =>
         c.id === id && c.type === 'switch' ? { ...c, closed: !c.closed } : c
       )
@@ -83,18 +155,82 @@ export const useCircuitStore = create<CircuitState>()((set) => ({
       ) {
         return s
       }
-      return { wires: [...s.wires, wire] }
+      return { ...pushPast(s), wires: [...s.wires, wire] }
     }),
 
-  removeWire: (id) => set((s) => ({ wires: s.wires.filter((w) => w.id !== id) })),
+  removeWire: (id) =>
+    set((s) => ({
+      ...pushPast(s),
+      wires: s.wires.filter((w) => w.id !== id),
+      selectedWireId: s.selectedWireId === id ? null : s.selectedWireId
+    })),
 
   setSimResult: (result) => set({ simResult: result }),
 
-  selectComponent: (id) => set({ selectedComponentId: id }),
-
   clearCircuit: () =>
-    set({ components: [], wires: [], simResult: null, selectedComponentId: null }),
+    set((s) => ({
+      ...pushPast(s),
+      components: [],
+      wires: [],
+      simResult: null,
+      ...clearedSelection
+    })),
 
   loadCircuitData: (components, wires) =>
-    set({ components, wires, simResult: null, selectedComponentId: null })
+    set((s) => ({
+      ...pushPast(s),
+      components,
+      wires,
+      simResult: null,
+      ...clearedSelection
+    })),
+
+  // ── Selection ──
+  selectComponent: (id) =>
+    set({
+      selectedComponentId: id,
+      selectedIds: id ? [id] : [],
+      selectedWireId: null
+    }),
+
+  setSelection: (ids) =>
+    set({
+      selectedIds: ids,
+      selectedComponentId: ids.length === 1 ? ids[0] : null,
+      selectedWireId: null
+    }),
+
+  selectWire: (id) =>
+    set({ selectedWireId: id, selectedComponentId: null, selectedIds: [] }),
+
+  clearSelection: () => set(clearedSelection),
+
+  // ── History ──
+  checkpoint: () => set((s) => pushPast(s)),
+
+  undo: () =>
+    set((s) => {
+      if (s.past.length === 0) return {}
+      const previous = s.past[s.past.length - 1]
+      return {
+        components: previous.components,
+        wires: previous.wires,
+        past: s.past.slice(0, -1),
+        future: [snap(s), ...s.future].slice(0, HISTORY_LIMIT),
+        ...clearedSelection
+      }
+    }),
+
+  redo: () =>
+    set((s) => {
+      if (s.future.length === 0) return {}
+      const next = s.future[0]
+      return {
+        components: next.components,
+        wires: next.wires,
+        past: [...s.past, snap(s)].slice(-HISTORY_LIMIT),
+        future: s.future.slice(1),
+        ...clearedSelection
+      }
+    })
 }))

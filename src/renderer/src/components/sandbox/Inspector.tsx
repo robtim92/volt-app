@@ -2,16 +2,44 @@ import { useEffect, useState } from 'react'
 import { useCircuitStore } from '@stores/circuitStore'
 import { ELEMENTS, formatValue, parseValue } from '../../sim/elements'
 import { terminalKey } from '../../sim/netlist'
+import { wireCurrent, wireNetVoltage } from '../../sim/measure'
+
+function Shell({ children }: { children: React.ReactNode }): JSX.Element {
+  return (
+    <div className="w-56 shrink-0 border-l border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-brand-navy/60 p-3 overflow-y-auto">
+      <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">
+        Inspector
+      </p>
+      {children}
+    </div>
+  )
+}
+
+function Reading({ label, value }: { label: string; value: string }): JSX.Element {
+  return (
+    <p className="flex justify-between text-gray-700 dark:text-gray-300">
+      <span>{label}</span>
+      <span className="font-mono">{value}</span>
+    </p>
+  )
+}
 
 export default function Inspector(): JSX.Element {
   const selectedId = useCircuitStore((s) => s.selectedComponentId)
   const component = useCircuitStore((s) =>
     s.components.find((c) => c.id === s.selectedComponentId)
   )
+  const selectedIds = useCircuitStore((s) => s.selectedIds)
+  const selectedWire = useCircuitStore((s) =>
+    s.wires.find((w) => w.id === s.selectedWireId)
+  )
   const simResult = useCircuitStore((s) => s.simResult)
   const updateComponent = useCircuitStore((s) => s.updateComponent)
   const removeComponent = useCircuitStore((s) => s.removeComponent)
+  const removeComponents = useCircuitStore((s) => s.removeComponents)
+  const removeWire = useCircuitStore((s) => s.removeWire)
   const toggleSwitch = useCircuitStore((s) => s.toggleSwitch)
+  const checkpoint = useCircuitStore((s) => s.checkpoint)
 
   const [valueText, setValueText] = useState('')
 
@@ -24,16 +52,69 @@ export default function Inspector(): JSX.Element {
     }
   }, [selectedId, component?.value]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Selected wire (net preview) ──
+  if (selectedWire) {
+    const netV = simResult?.solved ? wireNetVoltage(selectedWire, simResult) : null
+    const netI = simResult?.solved ? wireCurrent(selectedWire, simResult) : null
+    return (
+      <Shell>
+        <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Wire</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">Net connection</p>
+
+        <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">
+          Measurements
+        </p>
+        {simResult?.solved ? (
+          <div className="text-sm space-y-1">
+            <Reading label="Net voltage" value={netV !== null ? formatValue(netV, 'V') : '—'} />
+            <Reading
+              label="Current"
+              value={netI !== null ? formatValue(Math.abs(netI), 'A') : '—'}
+            />
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400 dark:text-gray-500">
+            {simResult?.error ?? 'No simulation yet'}
+          </p>
+        )}
+
+        <button
+          onClick={() => removeWire(selectedWire.id)}
+          className="mt-4 w-full px-2 py-1.5 text-sm rounded bg-red-500/10 text-red-500 hover:bg-red-500/20"
+        >
+          Delete wire
+        </button>
+      </Shell>
+    )
+  }
+
+  // ── Multiple components selected ──
+  if (selectedIds.length > 1) {
+    return (
+      <Shell>
+        <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+          {selectedIds.length} components selected
+        </p>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">
+          Drag any one to move the group.
+        </p>
+        <button
+          onClick={() => removeComponents(selectedIds)}
+          className="w-full px-2 py-1.5 text-sm rounded bg-red-500/10 text-red-500 hover:bg-red-500/20"
+        >
+          Delete selected
+        </button>
+      </Shell>
+    )
+  }
+
   if (!component) {
     return (
-      <div className="w-56 shrink-0 border-l border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-brand-navy/60 p-3">
-        <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">
-          Inspector
-        </p>
+      <Shell>
         <p className="text-sm text-gray-400 dark:text-gray-500">
-          Select a component to edit its properties and see live measurements.
+          Select a component or wire to edit its properties and see live measurements.
         </p>
-      </div>
+      </Shell>
     )
   }
 
@@ -43,10 +124,14 @@ export default function Inspector(): JSX.Element {
   const commitValue = (): void => {
     const parsed = parseValue(valueText)
     if (parsed !== null && parsed > 0) {
+      checkpoint()
       updateComponent(component.id, { value: parsed })
     } else if (component.type === 'voltage_source' || component.type === 'current_source') {
       // sources may be zero or negative
-      if (parsed !== null) updateComponent(component.id, { value: parsed })
+      if (parsed !== null) {
+        checkpoint()
+        updateComponent(component.id, { value: parsed })
+      }
     }
   }
 
@@ -58,11 +143,7 @@ export default function Inspector(): JSX.Element {
   })
 
   return (
-    <div className="w-56 shrink-0 border-l border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-brand-navy/60 p-3 overflow-y-auto">
-      <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">
-        Inspector
-      </p>
-
+    <Shell>
       <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
         {component.label ?? def.displayName}
       </p>
@@ -99,9 +180,10 @@ export default function Inspector(): JSX.Element {
 
       <div className="flex gap-2 mb-4">
         <button
-          onClick={() =>
+          onClick={() => {
+            checkpoint()
             updateComponent(component.id, { rotation: (component.rotation + 90) % 360 })
-          }
+          }}
           className="flex-1 px-2 py-1.5 text-sm rounded bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-white/20"
         >
           Rotate
@@ -120,21 +202,14 @@ export default function Inspector(): JSX.Element {
       {simResult?.solved ? (
         <div className="text-sm space-y-1">
           {current !== undefined && (
-            <p className="flex justify-between text-gray-700 dark:text-gray-300">
-              <span>Current</span>
-              <span className="font-mono">{formatValue(Math.abs(current), 'A')}</span>
-            </p>
+            <Reading label="Current" value={formatValue(Math.abs(current), 'A')} />
           )}
           {terminalVoltages.map((t) => (
-            <p
+            <Reading
               key={t.index}
-              className="flex justify-between text-gray-700 dark:text-gray-300"
-            >
-              <span>{t.name ?? `Pin ${t.index + 1}`}</span>
-              <span className="font-mono">
-                {t.voltage !== undefined ? formatValue(t.voltage, 'V') : '—'}
-              </span>
-            </p>
+              label={t.name ?? `Pin ${t.index + 1}`}
+              value={t.voltage !== undefined ? formatValue(t.voltage, 'V') : '—'}
+            />
           ))}
         </div>
       ) : (
@@ -142,6 +217,6 @@ export default function Inspector(): JSX.Element {
           {simResult?.error ?? 'No simulation yet'}
         </p>
       )}
-    </div>
+    </Shell>
   )
 }
