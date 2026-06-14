@@ -7,6 +7,7 @@
 import { useLessonStore } from '@stores/lessonStore'
 import { useUIStore } from '@stores/uiStore'
 import { getLessonsForTrack, getModulesForTrack } from '../../lessons'
+import { getDueLessons, type ReviewReason } from '../../lessons/review'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -24,6 +25,93 @@ function ProgressBar({ value, max }: { value: number; max: number }): JSX.Elemen
         className="h-full rounded-full bg-brand-yellow transition-all duration-500"
         style={{ width: `${pct}%` }}
       />
+    </div>
+  )
+}
+
+// ── Review today section ──────────────────────────────────────────────────────
+// Daily spaced-repetition queue (SM-2). Distinct from the static "Needs Review"
+// section below: this surfaces lessons whose SM-2 schedule is due, that scored
+// below 70%, or that have gone stale (see lessons/review.ts).
+
+const REVIEW_REASON: Record<ReviewReason, { label: string; badge: string }> = {
+  low_score: {
+    label: 'Low score',
+    badge: 'bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-400'
+  },
+  due: {
+    label: 'Due',
+    badge: 'bg-sky-100 text-sky-600 dark:bg-sky-500/15 dark:text-sky-400'
+  },
+  stale: {
+    label: 'Refresher',
+    badge: 'bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400'
+  }
+}
+
+function ReviewTodaySection(): JSX.Element | null {
+  const progress = useLessonStore((s) => s.progress)
+  const reviewSchedule = useLessonStore((s) => s.reviewSchedule)
+  const setActiveLesson = useLessonStore((s) => s.setActiveLesson)
+  const setActivePanel = useUIStore((s) => s.setActivePanel)
+
+  const dcLessons = getLessonsForTrack('dc')
+  const due = getDueLessons(dcLessons, progress, reviewSchedule)
+
+  if (due.length === 0) return null
+
+  const openLesson = (id: string): void => {
+    setActiveLesson(id)
+    setActivePanel('lessons')
+  }
+
+  return (
+    <div className="mb-10">
+      <div className="flex items-baseline justify-between mb-1">
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white">Review today</h2>
+        <span className="text-xs text-gray-400 dark:text-gray-500">
+          {due.length} {due.length === 1 ? 'lesson' : 'lessons'}
+        </span>
+      </div>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+        Spaced repetition keeps these fresh — a few minutes now saves a relearn later.
+      </p>
+      <div className="flex flex-col gap-2">
+        {due.map(({ lesson, reason, overdueDays }) => {
+          const meta = REVIEW_REASON[reason]
+          const score = progress[lesson.id]?.lastQuizScore
+          return (
+            <button
+              key={lesson.id}
+              onClick={() => openLesson(lesson.id)}
+              className="flex items-center gap-3 px-4 py-3 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-brand-navy/40 text-left hover:border-brand-yellow/60 transition-colors group"
+            >
+              <span className="text-base shrink-0">🔁</span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-medium text-gray-900 dark:text-gray-100 group-hover:text-brand-yellow transition-colors truncate">
+                  {lesson.title}
+                </span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  {lesson.module}
+                  {reason !== 'low_score' && overdueDays > 0 && (
+                    <span> · {overdueDays}d overdue</span>
+                  )}
+                </span>
+              </span>
+              {reason === 'low_score' && score !== undefined && (
+                <span className={`text-xs font-semibold shrink-0 ${scoreColor(score)}`}>
+                  {score}%
+                </span>
+              )}
+              <span
+                className={`text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${meta.badge}`}
+              >
+                {meta.label}
+              </span>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -216,6 +304,8 @@ export default function DashboardPanel(): JSX.Element {
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-8">
           Track your learning across all three circuits tracks.
         </p>
+
+        <ReviewTodaySection />
 
         <NeedsReviewSection />
 
