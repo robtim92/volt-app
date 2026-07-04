@@ -14,6 +14,7 @@ const PALETTE_ICONS: Partial<Record<ComponentType, string>> = {
   voltage_source: '⎓',
   current_source: '→',
   ac_voltage_source: '⏦',
+  transformer: '⇄',
   diode: '▷|',
   led: '💡',
   switch: '⌁',

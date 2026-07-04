@@ -38,6 +38,7 @@ export type ACElementType =
   | 'capacitor'
   | 'ac_voltage_source'
   | 'ac_current_source'
+  | 'transformer'
 
 export interface ACNetlistElement {
   id: string
@@ -50,6 +51,10 @@ export interface ACNetlistElement {
   amplitude?: number
   /** Source phasor phase in degrees (default 0). Sources only. */
   phaseDeg?: number
+  /** Transformer secondary [+, −] nodes (transformer only). */
+  secondaryNodes?: [string, string]
+  /** Ideal transformer turns ratio Np:Ns (transformer only). */
+  ratio?: number
 }
 
 export interface ACNetlist {
@@ -80,11 +85,15 @@ function validate(netlist: ACNetlist): string | null {
   const nodes = new Set<string>()
   for (const el of netlist.elements) {
     const isSource = el.type === 'ac_voltage_source' || el.type === 'ac_current_source'
-    if (!isSource && !(Number.isFinite(el.value) && el.value > 0)) {
+    if (!isSource && el.type !== 'transformer' && !(Number.isFinite(el.value) && el.value > 0)) {
       return `Element ${el.id} has an invalid value`
     }
     nodes.add(el.nodes[0])
     nodes.add(el.nodes[1])
+    if (el.secondaryNodes) {
+      nodes.add(el.secondaryNodes[0])
+      nodes.add(el.secondaryNodes[1])
+    }
   }
 
   if (!nodes.has(GROUND))
@@ -97,6 +106,13 @@ function validate(netlist: ACNetlist): string | null {
     if (!adjacency.has(b)) adjacency.set(b, [])
     adjacency.get(a)!.push(b)
     adjacency.get(b)!.push(a)
+    if (el.secondaryNodes) {
+      const [c, d] = el.secondaryNodes
+      if (!adjacency.has(c)) adjacency.set(c, [])
+      if (!adjacency.has(d)) adjacency.set(d, [])
+      adjacency.get(c)!.push(d)
+      adjacency.get(d)!.push(c)
+    }
   }
   const visited = new Set<string>([GROUND])
   const queue = [GROUND]
@@ -155,12 +171,19 @@ export function solveAC(netlist: ACNetlist, omega: number): ACSolveResult {
     for (const n of el.nodes) {
       if (n !== GROUND && !nodeIndex.has(n)) nodeIndex.set(n, nodeIndex.size)
     }
+    if (el.secondaryNodes) {
+      for (const n of el.secondaryNodes) {
+        if (n !== GROUND && !nodeIndex.has(n)) nodeIndex.set(n, nodeIndex.size)
+      }
+    }
   }
   const numNodes = nodeIndex.size
 
   const vSources = netlist.elements.filter((e) => e.type === 'ac_voltage_source')
   const numVSources = vSources.length
-  const size = numNodes + numVSources
+  const transformers = netlist.elements.filter((e) => e.type === 'transformer')
+  const numTransformers = transformers.length
+  const size = numNodes + numVSources + numTransformers
   if (size === 0) return fail('Circuit has no nodes to solve')
 
   const idx = (node: string): number => (node === GROUND ? -1 : nodeIndex.get(node)!)
@@ -212,6 +235,25 @@ export function solveAC(netlist: ACNetlist, omega: number): ACSolveResult {
     z[row] = fromPolar(vs.amplitude ?? 0, ((vs.phaseDeg ?? 0) * Math.PI) / 180)
   })
 
+  // Ideal transformers — one extra current unknown (primary current) each.
+  // Constraint: (v_p+ − v_p−) = n·(v_s+ − v_s−);  ampere-turns: i_s = −n·i_p.
+  transformers.forEach((tf, k) => {
+    const row = numNodes + numVSources + k
+    const n = tf.ratio ?? 1
+    const one = cplx(1, 0)
+    const nn = cplx(n, 0)
+    const [pp, pm] = tf.nodes
+    const [sp, sm] = tf.secondaryNodes ?? [GROUND, GROUND]
+    const ipp = idx(pp), ipm = idx(pm), isp = idx(sp), ism = idx(sm)
+    // primary current i_p flows into p+ and out of p−
+    if (ipp >= 0) { A[ipp][row] = add(A[ipp][row], one); A[row][ipp] = add(A[row][ipp], one) }
+    if (ipm >= 0) { A[ipm][row] = sub(A[ipm][row], one); A[row][ipm] = sub(A[row][ipm], one) }
+    // secondary current −n·i_p into s+ and out of s−
+    if (isp >= 0) { A[isp][row] = sub(A[isp][row], nn); A[row][isp] = sub(A[row][isp], nn) }
+    if (ism >= 0) { A[ism][row] = add(A[ism][row], nn); A[row][ism] = add(A[row][ism], nn) }
+    z[row] = cplx(0, 0)
+  })
+
   const x = solveComplexLinearSystem(A, z)
   if (x === null)
     return fail('Circuit could not be solved — check for source loops or isolated components')
@@ -235,6 +277,9 @@ export function solveAC(netlist: ACNetlist, omega: number): ACSolveResult {
   }
   vSources.forEach((vs, k) => {
     elementCurrents[vs.id] = x[numNodes + k]
+  })
+  transformers.forEach((tf, k) => {
+    elementCurrents[tf.id] = x[numNodes + numVSources + k]
   })
 
   return { solved: true, omega, nodeVoltages, elementCurrents }

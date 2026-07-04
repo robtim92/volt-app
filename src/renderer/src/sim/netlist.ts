@@ -180,6 +180,10 @@ export function buildNetlist(
       warnings.push(`${labelOf(c)}: transistors are not supported yet`)
       continue
     }
+    if (c.type === 'transformer') {
+      warnings.push(`${labelOf(c)}: transformers require AC analysis (they don't pass DC)`)
+      continue
+    }
 
     const nodes = twoTerminalNodes(c, terminalNodes, wiredTerminals, warnings)
     if (!nodes) continue
@@ -251,6 +255,31 @@ export function buildACNetlist(
     }
     if (c.type === 'diode' || c.type === 'led') {
       warnings.push(`${labelOf(c)}: diodes are not modelled in AC analysis`)
+      continue
+    }
+    if (c.type === 'transformer') {
+      const keys = [0, 1, 2, 3].map((i) => terminalKey(c.id, i))
+      const unwired = keys.filter((k) => !wiredTerminals.has(k))
+      if (unwired.length > 0) {
+        warnings.push(`${labelOf(c)} has an unconnected terminal`)
+        continue
+      }
+      const pPlus = terminalNodes[keys[0]]
+      const pMinus = terminalNodes[keys[1]]
+      const sPlus = terminalNodes[keys[2]]
+      const sMinus = terminalNodes[keys[3]]
+      if (pPlus === pMinus || sPlus === sMinus) {
+        warnings.push(`${labelOf(c)} has a short-circuited winding`)
+        continue
+      }
+      elements.push({
+        id: c.id,
+        type: 'transformer',
+        value: 0,
+        ratio: c.value ?? 2,
+        nodes: [pPlus, pMinus],
+        secondaryNodes: [sPlus, sMinus]
+      })
       continue
     }
 

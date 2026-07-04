@@ -14,7 +14,7 @@ export const GRID = 20
 
 export type ComponentType =
   | 'resistor' | 'capacitor' | 'inductor'
-  | 'voltage_source' | 'current_source' | 'ac_voltage_source'
+  | 'voltage_source' | 'current_source' | 'ac_voltage_source' | 'transformer'
   | 'diode' | 'led' | 'transistor_npn'
   | 'switch' | 'ground' | 'wire_node'
   | 'voltmeter' | 'ammeter'
@@ -112,6 +112,20 @@ export const ELEMENTS: Record<ComponentType, ElementDef> = {
     terminals: [{ x: -2 * GRID, y: 0, name: '+' }, { x: 2 * GRID, y: 0, name: '−' }],
     defaultValue: 5, // peak amplitude (V); frequency/phase live on the component
     unit: 'V',
+    inPalette: true
+  },
+  transformer: {
+    type: 'transformer',
+    displayName: 'Transformer',
+    labelPrefix: 'T',
+    terminals: [
+      { x: -2 * GRID, y: -GRID, name: 'P+' },
+      { x: -2 * GRID, y: GRID, name: 'P−' },
+      { x: 2 * GRID, y: -GRID, name: 'S+' },
+      { x: 2 * GRID, y: GRID, name: 'S−' }
+    ],
+    defaultValue: 2, // turns ratio Np:Ns (ideal transformer, AC-only)
+    unit: '',
     inPalette: true
   },
   diode: {

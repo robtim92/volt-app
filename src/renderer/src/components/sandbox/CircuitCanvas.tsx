@@ -169,6 +169,33 @@ function drawSymbol(
       ctx.stroke()
       break
     }
+    case 'transformer': {
+      const RC = 6
+      // winding leads
+      ctx.moveTo(-2 * GRID, -GRID); ctx.lineTo(-14, -GRID)
+      ctx.moveTo(-2 * GRID, GRID); ctx.lineTo(-14, GRID)
+      ctx.moveTo(2 * GRID, -GRID); ctx.lineTo(14, -GRID)
+      ctx.moveTo(2 * GRID, GRID); ctx.lineTo(14, GRID)
+      ctx.stroke()
+      // primary coil (bumps toward the core)
+      ctx.beginPath()
+      for (let i = 0; i < 3; i++) {
+        const cy = -GRID + RC + i * (2 * RC)
+        ctx.arc(-14, cy, RC, -Math.PI / 2, Math.PI / 2, false)
+      }
+      // secondary coil
+      for (let i = 0; i < 3; i++) {
+        const cy = -GRID + RC + i * (2 * RC)
+        ctx.arc(14, cy, RC, Math.PI / 2, -Math.PI / 2, false)
+      }
+      ctx.stroke()
+      // laminated core
+      ctx.beginPath()
+      ctx.moveTo(-3, -GRID); ctx.lineTo(-3, GRID)
+      ctx.moveTo(3, -GRID); ctx.lineTo(3, GRID)
+      ctx.stroke()
+      break
+    }
     case 'voltmeter':
     case 'ammeter': {
       ctx.moveTo(-E, 0); ctx.lineTo(-16, 0)

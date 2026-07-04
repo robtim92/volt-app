@@ -204,7 +204,11 @@ export default function Inspector(): JSX.Element {
       {hasValue && (
         <label className="block mb-3">
           <span className="text-xs text-gray-500 dark:text-gray-400">
-            {isAcSource ? 'Amplitude (V peak)' : `Value ${def.unit ? `(${def.unit})` : ''}`}
+            {isAcSource
+              ? 'Amplitude (V peak)'
+              : component.type === 'transformer'
+                ? 'Turns ratio (Np:Ns)'
+                : `Value ${def.unit ? `(${def.unit})` : ''}`}
           </span>
           <input
             type="text"
