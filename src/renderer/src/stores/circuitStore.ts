@@ -142,7 +142,9 @@ export const useCircuitStore = create<CircuitState>()((set) => ({
     set((s) => ({
       ...pushPast(s),
       components: s.components.map((c) =>
-        c.id === id && c.type === 'switch' ? { ...c, closed: !c.closed } : c
+        c.id === id && (c.type === 'switch' || c.type === 'breaker' || c.type === 'gfci')
+          ? { ...c, closed: !c.closed }
+          : c
       )
     })),
 

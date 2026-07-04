@@ -15,9 +15,28 @@ import { buildNetlist, buildACNetlist } from '../sim/netlist'
 import { solveDC } from '../sim/solver'
 import { solveAC } from '../sim/acSolver'
 import { abs, phaseDeg } from '../sim/complex'
+import { formatValue, type CircuitComponent } from '../sim/elements'
 import type { SimRequest, SimResponse } from '../sim/simWorker'
 
 const DEBOUNCE_MS = 60
+
+/** Warnings for breakers/GFCIs whose (magnitude) current exceeds their rating. */
+function tripWarnings(
+  components: CircuitComponent[],
+  elementCurrents: Record<string, number>
+): string[] {
+  const out: string[] = []
+  for (const c of components) {
+    if ((c.type === 'breaker' || c.type === 'gfci') && c.closed) {
+      const rating = c.value ?? Infinity
+      const i = Math.abs(elementCurrents[c.id] ?? 0)
+      if (i > rating) {
+        out.push(`${c.label ?? c.id} tripped — ${formatValue(i, 'A')} exceeds ${formatValue(rating, 'A')} rating`)
+      }
+    }
+  }
+  return out
+}
 
 export function useSimulation(): void {
   const components = useCircuitStore((s) => s.components)
@@ -83,7 +102,7 @@ export function useSimulation(): void {
           nodeVoltages,
           elementCurrents,
           terminalNodes,
-          warnings: allWarnings,
+          warnings: [...allWarnings, ...tripWarnings(components, elementCurrents)],
           error: ac.error,
           ac: true,
           omega,
@@ -103,7 +122,7 @@ export function useSimulation(): void {
           nodeVoltages: solved.nodeVoltages,
           elementCurrents: solved.elementCurrents,
           terminalNodes,
-          warnings,
+          warnings: [...warnings, ...tripWarnings(components, solved.elementCurrents)],
           error: solved.error
         }
         setSimResult(result)

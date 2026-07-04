@@ -16,7 +16,7 @@ export type ComponentType =
   | 'resistor' | 'capacitor' | 'inductor'
   | 'voltage_source' | 'current_source' | 'ac_voltage_source' | 'transformer'
   | 'diode' | 'led' | 'transistor_npn'
-  | 'switch' | 'ground' | 'wire_node'
+  | 'switch' | 'breaker' | 'gfci' | 'ground' | 'wire_node'
   | 'voltmeter' | 'ammeter'
 
 export interface CircuitComponent {
@@ -153,6 +153,24 @@ export const ELEMENTS: Record<ComponentType, ElementDef> = {
     terminals: [{ x: -2 * GRID, y: 0 }, { x: 2 * GRID, y: 0 }],
     defaultValue: null,
     unit: '',
+    inPalette: true
+  },
+  breaker: {
+    type: 'breaker',
+    displayName: 'Circuit Breaker',
+    labelPrefix: 'CB',
+    terminals: [{ x: -2 * GRID, y: 0 }, { x: 2 * GRID, y: 0 }],
+    defaultValue: 15, // trip current rating (A)
+    unit: 'A',
+    inPalette: true
+  },
+  gfci: {
+    type: 'gfci',
+    displayName: 'GFCI',
+    labelPrefix: 'GF',
+    terminals: [{ x: -2 * GRID, y: 0 }, { x: 2 * GRID, y: 0 }],
+    defaultValue: 0.005, // leakage-trip threshold (A) — teaching approximation
+    unit: 'A',
     inPalette: true
   },
   ground: {

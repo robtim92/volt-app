@@ -18,6 +18,8 @@ const PALETTE_ICONS: Partial<Record<ComponentType, string>> = {
   diode: '▷|',
   led: '💡',
   switch: '⌁',
+  breaker: '⎊',
+  gfci: '⊘',
   ground: '⏚',
   wire_node: '•'
 }

@@ -254,6 +254,24 @@ function drawSymbol(
       ctx.fill()
       break
     }
+    case 'breaker':
+    case 'gfci': {
+      ctx.moveTo(-E, 0); ctx.lineTo(-14, 0)
+      ctx.moveTo(14, 0); ctx.lineTo(E, 0)
+      ctx.moveTo(-14, 0)
+      if (comp.closed) ctx.lineTo(14, 0)
+      else ctx.lineTo(10, -14)
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.arc(-14, 0, 3, 0, Math.PI * 2)
+      ctx.arc(14, 0, 3, 0, Math.PI * 2)
+      ctx.fill()
+      // enclosure box marks it as a protective device
+      ctx.beginPath()
+      ctx.strokeRect(-19, -13, 38, 26)
+      ctx.stroke()
+      break
+    }
     case 'ground': {
       ctx.moveTo(0, -GRID); ctx.lineTo(0, 2)
       ctx.moveTo(-12, 2); ctx.lineTo(12, 2)
@@ -372,7 +390,8 @@ export default function CircuitCanvas({
         rotation: 0,
         value: def.defaultValue ?? undefined,
         label: nextLabel(type, store.components),
-        closed: type === 'switch' ? false : undefined,
+        closed:
+          type === 'switch' ? false : type === 'breaker' || type === 'gfci' ? true : undefined,
         frequency: type === 'ac_voltage_source' ? 60 : undefined
       }
       store.addComponent(comp)
@@ -498,7 +517,8 @@ export default function CircuitCanvas({
   const handleDoubleClick = (e: React.MouseEvent): void => {
     const { x, y } = canvasPoint(e)
     const comp = findComponent(x, y)
-    if (comp?.type === 'switch') useCircuitStore.getState().toggleSwitch(comp.id)
+    if (comp && (comp.type === 'switch' || comp.type === 'breaker' || comp.type === 'gfci'))
+      useCircuitStore.getState().toggleSwitch(comp.id)
   }
 
   const handleContextMenu = (e: React.MouseEvent): void => {
@@ -741,10 +761,16 @@ export default function CircuitCanvas({
           solved &&
           (simResult!.elementCurrents[comp.id] ?? 0) > 1e-3
 
+        const tripped =
+          (comp.type === 'breaker' || comp.type === 'gfci') &&
+          solved &&
+          (comp.closed ?? false) &&
+          Math.abs(simResult!.elementCurrents[comp.id] ?? 0) > (comp.value ?? Infinity)
+
         ctx.save()
         ctx.translate(comp.x, comp.y)
         ctx.rotate((comp.rotation * Math.PI) / 180)
-        drawSymbol(ctx, comp, inkNeutral, lit)
+        drawSymbol(ctx, comp, tripped ? '#ef4444' : inkNeutral, lit)
         ctx.restore()
 
         if (selectedSet.has(comp.id)) {

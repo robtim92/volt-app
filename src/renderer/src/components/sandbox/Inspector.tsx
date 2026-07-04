@@ -208,7 +208,11 @@ export default function Inspector(): JSX.Element {
               ? 'Amplitude (V peak)'
               : component.type === 'transformer'
                 ? 'Turns ratio (Np:Ns)'
-                : `Value ${def.unit ? `(${def.unit})` : ''}`}
+                : component.type === 'breaker'
+                  ? 'Trip rating (A)'
+                  : component.type === 'gfci'
+                    ? 'Leakage trip (A)'
+                    : `Value ${def.unit ? `(${def.unit})` : ''}`}
           </span>
           <input
             type="text"
@@ -254,14 +258,33 @@ export default function Inspector(): JSX.Element {
         </div>
       )}
 
-      {component.type === 'switch' && (
+      {(component.type === 'switch' ||
+        component.type === 'breaker' ||
+        component.type === 'gfci') && (
         <button
           onClick={() => toggleSwitch(component.id)}
           className="mb-3 w-full px-2 py-1.5 text-sm rounded bg-brand-yellow/20 text-brand-yellow hover:bg-brand-yellow/30 font-medium"
         >
-          {component.closed ? 'Open switch' : 'Close switch'}
+          {component.type === 'switch'
+            ? component.closed
+              ? 'Open switch'
+              : 'Close switch'
+            : component.closed
+              ? 'Turn off'
+              : 'Reset (turn on)'}
         </button>
       )}
+
+      {(component.type === 'breaker' || component.type === 'gfci') &&
+        simResult?.solved &&
+        (component.closed ?? false) &&
+        current !== undefined &&
+        Math.abs(current) > (component.value ?? Infinity) && (
+          <p className="mb-3 text-xs font-semibold text-red-500">
+            ⚠ Tripped — {formatValue(Math.abs(current), 'A')} exceeds the{' '}
+            {formatValue(component.value ?? 0, 'A')} rating.
+          </p>
+        )}
 
       <div className="flex gap-2 mb-4">
         <button

@@ -211,6 +211,10 @@ export function buildNetlist(
         elements.push({ id: c.id, type: 'diode', value: 0, nodes, params: LED_PARAMS })
         break
       case 'switch':
+      case 'breaker':
+      case 'gfci':
+        // Conductor when on/closed; open (no element) otherwise. Overcurrent
+        // tripping is flagged post-solve in useSimulation, not modelled here.
         if (c.closed) {
           elements.push({ id: c.id, type: 'resistor', value: SHORT_RESISTANCE, nodes })
         }
@@ -325,6 +329,10 @@ export function buildACNetlist(
         warnings.push(`${labelOf(c)}: DC current source is open in AC analysis`)
         break
       case 'switch':
+      case 'breaker':
+      case 'gfci':
+        // Conductor when on/closed; open (no element) otherwise. Overcurrent
+        // tripping is flagged post-solve in useSimulation, not modelled here.
         if (c.closed) {
           elements.push({ id: c.id, type: 'resistor', value: SHORT_RESISTANCE, nodes })
         }
