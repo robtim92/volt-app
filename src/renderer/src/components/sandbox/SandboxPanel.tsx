@@ -16,6 +16,7 @@ import { validateCircuitQuiz } from '../../lessons/validation'
 import Palette from './Palette'
 import CircuitCanvas from './CircuitCanvas'
 import Inspector from './Inspector'
+import Oscilloscope from './Oscilloscope'
 
 export default function SandboxPanel(): JSX.Element {
   useSimulation()
@@ -36,6 +37,8 @@ export default function SandboxPanel(): JSX.Element {
   const redo = useCircuitStore((s) => s.redo)
   const canUndo = useCircuitStore((s) => s.past.length > 0)
   const canRedo = useCircuitStore((s) => s.future.length > 0)
+  const scopeOpen = useUIStore((s) => s.scopeOpen)
+  const toggleScope = useUIStore((s) => s.toggleScope)
 
   const activeCircuitQuiz = useUIStore((s) => s.activeCircuitQuiz)
   const setCircuitQuizResult = useUIStore((s) => s.setCircuitQuizResult)
@@ -244,6 +247,18 @@ export default function SandboxPanel(): JSX.Element {
           aria-label="Import circuit file"
         />
         <button
+          onClick={toggleScope}
+          title="Toggle the oscilloscope"
+          aria-label="Toggle oscilloscope"
+          className={`px-2 py-1 text-sm rounded ${
+            scopeOpen
+              ? 'bg-brand-yellow/20 text-brand-yellow'
+              : 'bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-white/20'
+          }`}
+        >
+          ∿ Scope
+        </button>
+        <button
           onClick={undo}
           disabled={!canUndo}
           title="Undo (Ctrl+Z)"
@@ -346,6 +361,8 @@ export default function SandboxPanel(): JSX.Element {
         </div>
         <Inspector />
       </div>
+
+      {scopeOpen && <Oscilloscope />}
 
       {/* Status bar */}
       <div className="h-7 shrink-0 flex items-center px-3 border-t border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-brand-navy/40">

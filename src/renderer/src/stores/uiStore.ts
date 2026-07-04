@@ -26,6 +26,8 @@ interface UIState {
   hasOnboarded: boolean
   /** Whether the AI assistant slide-over is open (transient, not persisted). */
   aiPanelOpen: boolean
+  /** Whether the oscilloscope drawer is open (transient, not persisted). */
+  scopeOpen: boolean
   /** Set when the learner launches a circuit quiz from the lesson player. */
   activeCircuitQuiz: ActiveCircuitQuiz | null
 
@@ -35,6 +37,8 @@ interface UIState {
   setSidebarOpen: (open: boolean) => void
   setAIPanelOpen: (open: boolean) => void
   toggleAIPanel: () => void
+  setScopeOpen: (open: boolean) => void
+  toggleScope: () => void
   completeOnboarding: () => void
   startCircuitQuiz: (lessonId: string, cardIndex: number, card: CircuitQuizCard) => void
   setCircuitQuizResult: (passed: boolean, failures: string[]) => void
@@ -51,6 +55,7 @@ export const useUIStore = create<UIState>()(
       sidebarOpen: true,
       hasOnboarded: false,
       aiPanelOpen: false,
+      scopeOpen: false,
       activeCircuitQuiz: null,
 
       // Actions
@@ -60,6 +65,8 @@ export const useUIStore = create<UIState>()(
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       setAIPanelOpen: (open) => set({ aiPanelOpen: open }),
       toggleAIPanel: () => set((s) => ({ aiPanelOpen: !s.aiPanelOpen })),
+      setScopeOpen: (open) => set({ scopeOpen: open }),
+      toggleScope: () => set((s) => ({ scopeOpen: !s.scopeOpen })),
       completeOnboarding: () => set({ hasOnboarded: true }),
       startCircuitQuiz: (lessonId, cardIndex, card) =>
         set({
