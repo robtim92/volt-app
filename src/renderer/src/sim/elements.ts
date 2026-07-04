@@ -14,7 +14,7 @@ export const GRID = 20
 
 export type ComponentType =
   | 'resistor' | 'capacitor' | 'inductor'
-  | 'voltage_source' | 'current_source'
+  | 'voltage_source' | 'current_source' | 'ac_voltage_source'
   | 'diode' | 'led' | 'transistor_npn'
   | 'switch' | 'ground' | 'wire_node'
   | 'voltmeter' | 'ammeter'
@@ -28,6 +28,8 @@ export interface CircuitComponent {
   value?: number    // resistance Ω, voltage V, current A, capacitance F, inductance H
   label?: string    // user-visible label (R1, V1, ...)
   closed?: boolean  // switches only; default false (open)
+  frequency?: number // ac_voltage_source only: frequency in Hz
+  phase?: number     // ac_voltage_source only: phase in degrees (default 0)
 }
 
 export interface Wire {
@@ -101,6 +103,15 @@ export const ELEMENTS: Record<ComponentType, ElementDef> = {
     terminals: [{ x: -2 * GRID, y: 0, name: 'out' }, { x: 2 * GRID, y: 0, name: 'in' }],
     defaultValue: 0.01,
     unit: 'A',
+    inPalette: true
+  },
+  ac_voltage_source: {
+    type: 'ac_voltage_source',
+    displayName: 'AC Source',
+    labelPrefix: 'Vac',
+    terminals: [{ x: -2 * GRID, y: 0, name: '+' }, { x: 2 * GRID, y: 0, name: '−' }],
+    defaultValue: 5, // peak amplitude (V); frequency/phase live on the component
+    unit: 'V',
     inPalette: true
   },
   diode: {

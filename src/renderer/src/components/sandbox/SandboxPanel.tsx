@@ -146,6 +146,9 @@ export default function SandboxPanel(): JSX.Element {
   }
 
   // ── status line ──
+  const acHz =
+    simResult?.ac && simResult.omega ? Math.round(simResult.omega / (2 * Math.PI)) : null
+  const solvedPrefix = acHz !== null ? `AC @ ${acHz} Hz` : 'Solved'
   let status: { text: string; tone: 'ok' | 'warn' | 'error' | 'idle' }
   if (components.length === 0) {
     status = { text: 'Place components to start building', tone: 'idle' }
@@ -154,10 +157,10 @@ export default function SandboxPanel(): JSX.Element {
   } else if (!simResult.solved) {
     status = { text: simResult.error ?? 'Cannot solve circuit', tone: 'error' }
   } else if (simResult.warnings.length > 0) {
-    status = { text: `Solved · ${simResult.warnings[0]}`, tone: 'warn' }
+    status = { text: `${solvedPrefix} · ${simResult.warnings[0]}`, tone: 'warn' }
   } else {
     status = {
-      text: `Solved · ${components.length} components · ${wires.length} wires`,
+      text: `${solvedPrefix} · ${components.length} components · ${wires.length} wires`,
       tone: 'ok'
     }
   }

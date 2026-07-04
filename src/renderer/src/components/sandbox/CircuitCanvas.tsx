@@ -156,6 +156,19 @@ function drawSymbol(
       ctx.stroke()
       break
     }
+    case 'ac_voltage_source': {
+      ctx.moveTo(-E, 0); ctx.lineTo(-16, 0)
+      ctx.moveTo(16, 0); ctx.lineTo(E, 0)
+      ctx.moveTo(16, 0)
+      ctx.arc(0, 0, 16, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.beginPath()                            // sine wave inside the circle
+      ctx.moveTo(-9, 0)
+      ctx.quadraticCurveTo(-4.5, -9, 0, 0)
+      ctx.quadraticCurveTo(4.5, 9, 9, 0)
+      ctx.stroke()
+      break
+    }
     case 'voltmeter':
     case 'ammeter': {
       ctx.moveTo(-E, 0); ctx.lineTo(-16, 0)
@@ -332,7 +345,8 @@ export default function CircuitCanvas({
         rotation: 0,
         value: def.defaultValue ?? undefined,
         label: nextLabel(type, store.components),
-        closed: type === 'switch' ? false : undefined
+        closed: type === 'switch' ? false : undefined,
+        frequency: type === 'ac_voltage_source' ? 60 : undefined
       }
       store.addComponent(comp)
       store.selectComponent(comp.id)

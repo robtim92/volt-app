@@ -15,6 +15,16 @@ export interface SimulationResult {
   /** netlist warnings (unconnected terminals, etc.) */
   warnings: string[]
   error?: string
+
+  // ── AC analysis (single-frequency phasor) ──
+  /** True when this result came from the AC phasor solver. */
+  ac?: boolean
+  /** Analysis angular frequency in rad/s (AC only). */
+  omega?: number
+  /** node → voltage phase in degrees (AC only). In AC mode nodeVoltages holds peak magnitudes. */
+  nodeVoltagePhase?: Record<string, number>
+  /** component id → current phase in degrees (AC only). In AC mode elementCurrents holds peak magnitudes. */
+  elementCurrentPhase?: Record<string, number>
 }
 
 /** Undo/redo snapshot — only the circuit graph, not transient UI/sim state. */

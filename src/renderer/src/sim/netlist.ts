@@ -2,7 +2,8 @@
  * Volt — Netlist Builder
  *
  * Converts the canvas representation (components + wires between terminals)
- * into the node-based netlist the MNA solver consumes.
+ * into the node-based netlists the solvers consume — `buildNetlist` for the DC
+ * MNA solver, `buildACNetlist` for the AC phasor solver.
  *
  * Node identification is a union-find over terminals: every wire merges the
  * two terminals it connects. Any group containing a ground component's
@@ -11,10 +12,12 @@
  * DC behaviour of reactive components (steady state):
  *   - capacitor → open circuit (omitted from the netlist)
  *   - inductor  → ideal wire (modelled as a 1 mΩ resistor)
- * These become real dynamic models when transient analysis lands (AC phase).
+ * In AC analysis these become real complex impedances (see acSolver.ts); the AC
+ * builder passes their L/C values straight through.
  */
 
 import { GROUND, LED_PARAMS, type Netlist, type NetlistElement } from './solver'
+import type { ACNetlist, ACNetlistElement } from './acSolver'
 import { ELEMENTS, type CircuitComponent, type Wire } from './elements'
 
 /** Resistance used for closed switches, ammeters, and DC-shorted inductors */
@@ -27,6 +30,12 @@ export interface NetlistBuildResult {
   /** `${componentId}:${terminalIndex}` → node name (for visualization) */
   terminalNodes: Record<string, string>
   /** Human-readable issues: unconnected terminals, unsupported components... */
+  warnings: string[]
+}
+
+export interface ACNetlistBuildResult {
+  netlist: ACNetlist
+  terminalNodes: Record<string, string>
   warnings: string[]
 }
 
@@ -54,19 +63,21 @@ class UnionFind {
   }
 }
 
-// ── Builder ──────────────────────────────────────────────────────────────────
+// ── Shared node assignment ─────────────────────────────────────────────────────
 
-export function buildNetlist(
-  components: CircuitComponent[],
-  wires: Wire[]
-): NetlistBuildResult {
+interface NodeAssignment {
+  terminalNodes: Record<string, string>
+  wiredTerminals: Set<string>
+  warnings: string[]
+  byId: Map<string, CircuitComponent>
+}
+
+/** Union-find over terminals → stable node names. Shared by both builders. */
+function computeTerminalNodes(components: CircuitComponent[], wires: Wire[]): NodeAssignment {
   const warnings: string[] = []
   const byId = new Map(components.map((c) => [c.id, c]))
   const uf = new UnionFind()
 
-  const labelOf = (c: CircuitComponent): string => c.label ?? c.id
-
-  // Register every terminal of every component
   const allTerminals: string[] = []
   for (const c of components) {
     const def = ELEMENTS[c.type]
@@ -75,7 +86,6 @@ export function buildNetlist(
     }
   }
 
-  // Union terminals connected by wires
   const wiredTerminals = new Set<string>()
   for (const w of wires) {
     const from = byId.get(w.fromComponentId)
@@ -98,7 +108,6 @@ export function buildNetlist(
     wiredTerminals.add(b)
   }
 
-  // Name the nodes: ground groups first, then sequential
   const groupNames = new Map<string, string>()
   for (const c of components) {
     if (c.type === 'ground') {
@@ -120,39 +129,60 @@ export function buildNetlist(
   const terminalNodes: Record<string, string> = {}
   for (const t of allTerminals) terminalNodes[t] = nodeNameOf(t)
 
-  // Generate solver elements
+  return { terminalNodes, wiredTerminals, warnings, byId }
+}
+
+const labelOf = (c: CircuitComponent): string => c.label ?? c.id
+
+/**
+ * For a standard two-terminal component: verify both ends are wired and that
+ * it isn't shorted. Returns its [nodeA, nodeB] or null (with a warning pushed).
+ */
+function twoTerminalNodes(
+  c: CircuitComponent,
+  terminalNodes: Record<string, string>,
+  wiredTerminals: Set<string>,
+  warnings: string[]
+): [string, string] | null {
+  const def = ELEMENTS[c.type]
+  const unwired = def.terminals
+    .map((_, i) => i)
+    .filter((i) => !wiredTerminals.has(terminalKey(c.id, i)))
+  if (unwired.length > 0) {
+    warnings.push(`${labelOf(c)} has an unconnected terminal`)
+    return null
+  }
+  const nodes: [string, string] = [
+    terminalNodes[terminalKey(c.id, 0)],
+    terminalNodes[terminalKey(c.id, 1)]
+  ]
+  if (nodes[0] === nodes[1]) {
+    if (c.type === 'voltage_source' || c.type === 'ac_voltage_source') {
+      warnings.push(`${labelOf(c)} is short-circuited`)
+    }
+    return null
+  }
+  return nodes
+}
+
+// ── DC builder ─────────────────────────────────────────────────────────────────
+
+export function buildNetlist(
+  components: CircuitComponent[],
+  wires: Wire[]
+): NetlistBuildResult {
+  const { terminalNodes, wiredTerminals, warnings } = computeTerminalNodes(components, wires)
+
   const elements: NetlistElement[] = []
   for (const c of components) {
-    const def = ELEMENTS[c.type]
-
-    // Structural components produce no element
     if (c.type === 'ground' || c.type === 'wire_node') continue
-
     if (c.type === 'transistor_npn') {
       warnings.push(`${labelOf(c)}: transistors are not supported yet`)
       continue
     }
 
-    // Two-terminal electrical components: both ends must be wired
-    const unwired = def.terminals
-      .map((_, i) => i)
-      .filter((i) => !wiredTerminals.has(terminalKey(c.id, i)))
-    if (unwired.length > 0) {
-      warnings.push(`${labelOf(c)} has an unconnected terminal`)
-      continue
-    }
-
-    const nodes: [string, string] = [
-      terminalNodes[terminalKey(c.id, 0)],
-      terminalNodes[terminalKey(c.id, 1)]
-    ]
-    if (nodes[0] === nodes[1]) {
-      // Both ends on the same node: shorted component, contributes nothing
-      if (c.type === 'voltage_source') {
-        warnings.push(`${labelOf(c)} is short-circuited`)
-      }
-      continue
-    }
+    const nodes = twoTerminalNodes(c, terminalNodes, wiredTerminals, warnings)
+    if (!nodes) continue
 
     const value = c.value ?? ELEMENTS[c.type].defaultValue ?? 0
 
@@ -162,6 +192,10 @@ export function buildNetlist(
         break
       case 'voltage_source':
         elements.push({ id: c.id, type: 'voltage_source', value, nodes })
+        break
+      case 'ac_voltage_source':
+        // In DC steady state an AC source averages to 0 V → a short.
+        elements.push({ id: c.id, type: 'voltage_source', value: 0, nodes })
         break
       case 'current_source':
         elements.push({ id: c.id, type: 'current_source', value, nodes })
@@ -173,24 +207,103 @@ export function buildNetlist(
         elements.push({ id: c.id, type: 'diode', value: 0, nodes, params: LED_PARAMS })
         break
       case 'switch':
-        // Open switch: no element. Closed: near-ideal conductor.
         if (c.closed) {
           elements.push({ id: c.id, type: 'resistor', value: SHORT_RESISTANCE, nodes })
         }
         break
       case 'inductor':
-        // DC steady state: inductor is a wire
         elements.push({ id: c.id, type: 'resistor', value: SHORT_RESISTANCE, nodes })
         break
       case 'capacitor':
-        // DC steady state: capacitor is an open circuit — no element
         break
       case 'voltmeter':
-        // Near-ideal voltmeter: very high input impedance
         elements.push({ id: c.id, type: 'resistor', value: VOLTMETER_RESISTANCE, nodes })
         break
       case 'ammeter':
-        // Near-ideal ammeter: negligible series resistance
+        elements.push({ id: c.id, type: 'resistor', value: SHORT_RESISTANCE, nodes })
+        break
+    }
+  }
+
+  return { netlist: { elements }, terminalNodes, warnings }
+}
+
+// ── AC builder ─────────────────────────────────────────────────────────────────
+
+/**
+ * Build the netlist for single-frequency AC phasor analysis. Reactive elements
+ * keep their real L/C values (turned into complex impedances by the solver at ω).
+ * Nonlinear parts (diodes/LEDs/transistors) aren't modelled in AC and are
+ * dropped with a warning; a DC voltage source becomes a short (0 V AC).
+ */
+export function buildACNetlist(
+  components: CircuitComponent[],
+  wires: Wire[]
+): ACNetlistBuildResult {
+  const { terminalNodes, wiredTerminals, warnings } = computeTerminalNodes(components, wires)
+
+  const elements: ACNetlistElement[] = []
+  for (const c of components) {
+    if (c.type === 'ground' || c.type === 'wire_node') continue
+    if (c.type === 'transistor_npn') {
+      warnings.push(`${labelOf(c)}: transistors are not supported in AC analysis`)
+      continue
+    }
+    if (c.type === 'diode' || c.type === 'led') {
+      warnings.push(`${labelOf(c)}: diodes are not modelled in AC analysis`)
+      continue
+    }
+
+    const nodes = twoTerminalNodes(c, terminalNodes, wiredTerminals, warnings)
+    if (!nodes) continue
+
+    const value = c.value ?? ELEMENTS[c.type].defaultValue ?? 0
+
+    switch (c.type) {
+      case 'resistor':
+        elements.push({ id: c.id, type: 'resistor', value, nodes })
+        break
+      case 'inductor':
+        elements.push({ id: c.id, type: 'inductor', value, nodes })
+        break
+      case 'capacitor':
+        elements.push({ id: c.id, type: 'capacitor', value, nodes })
+        break
+      case 'ac_voltage_source':
+        elements.push({
+          id: c.id,
+          type: 'ac_voltage_source',
+          value: 0,
+          amplitude: value,
+          phaseDeg: c.phase ?? 0,
+          nodes
+        })
+        break
+      case 'voltage_source':
+        // A DC source contributes nothing at the analysis frequency → short it.
+        warnings.push(`${labelOf(c)}: DC source treated as a short in AC analysis`)
+        elements.push({
+          id: c.id,
+          type: 'ac_voltage_source',
+          value: 0,
+          amplitude: 0,
+          phaseDeg: 0,
+          nodes
+        })
+        break
+      case 'current_source':
+        // DC current source → open circuit in AC. Drop it.
+        warnings.push(`${labelOf(c)}: DC current source is open in AC analysis`)
+        break
+      case 'switch':
+        if (c.closed) {
+          elements.push({ id: c.id, type: 'resistor', value: SHORT_RESISTANCE, nodes })
+        }
+        break
+      case 'voltmeter':
+        elements.push({ id: c.id, type: 'resistor', value: VOLTMETER_RESISTANCE, nodes })
+        break
+      case 'ammeter':
         elements.push({ id: c.id, type: 'resistor', value: SHORT_RESISTANCE, nodes })
         break
     }

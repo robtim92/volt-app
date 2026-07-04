@@ -24,6 +24,11 @@ function Reading({ label, value }: { label: string; value: string }): JSX.Elemen
   )
 }
 
+/** AC reading: RMS magnitude (from a peak value) with phase, e.g. "3.54 V ∠-45°". */
+function acReading(peak: number, phaseDeg: number, unit: string): string {
+  return `${formatValue(Math.abs(peak) / Math.SQRT2, unit)} ∠${Math.round(phaseDeg)}°`
+}
+
 export default function Inspector(): JSX.Element {
   const selectedId = useCircuitStore((s) => s.selectedComponentId)
   const component = useCircuitStore((s) =>
@@ -42,34 +47,59 @@ export default function Inspector(): JSX.Element {
   const checkpoint = useCircuitStore((s) => s.checkpoint)
 
   const [valueText, setValueText] = useState('')
+  const [freqText, setFreqText] = useState('')
+  const [phaseText, setPhaseText] = useState('')
 
-  // Sync the editable value field when selection changes
+  const ac = simResult?.ac === true
+
+  // Sync editable fields when selection changes
   useEffect(() => {
     if (component) {
       const def = ELEMENTS[component.type]
       const v = component.value ?? def.defaultValue
       setValueText(v !== null && v !== undefined ? formatValue(v) : '')
+      if (component.type === 'ac_voltage_source') {
+        setFreqText(String(component.frequency ?? 60))
+        setPhaseText(String(component.phase ?? 0))
+      }
     }
-  }, [selectedId, component?.value]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedId, component?.value, component?.frequency, component?.phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Selected wire (net preview) ──
   if (selectedWire) {
     const netV = simResult?.solved ? wireNetVoltage(selectedWire, simResult) : null
     const netI = simResult?.solved ? wireCurrent(selectedWire, simResult) : null
+    const node = simResult?.terminalNodes[terminalKey(selectedWire.fromComponentId, selectedWire.fromTerminal)]
+    const netVPhase = node !== undefined ? simResult?.nodeVoltagePhase?.[node] : undefined
     return (
       <Shell>
         <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Wire</p>
         <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">Net connection</p>
 
         <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">
-          Measurements
+          Measurements {ac && <span className="text-brand-yellow">· AC (RMS)</span>}
         </p>
         {simResult?.solved ? (
           <div className="text-sm space-y-1">
-            <Reading label="Net voltage" value={netV !== null ? formatValue(netV, 'V') : '—'} />
+            <Reading
+              label={ac ? 'Net voltage' : 'Net voltage'}
+              value={
+                netV === null
+                  ? '—'
+                  : ac
+                    ? acReading(netV, netVPhase ?? 0, 'V')
+                    : formatValue(netV, 'V')
+              }
+            />
             <Reading
               label="Current"
-              value={netI !== null ? formatValue(Math.abs(netI), 'A') : '—'}
+              value={
+                netI === null
+                  ? '—'
+                  : ac
+                    ? `${formatValue(Math.abs(netI) / Math.SQRT2, 'A')}`
+                    : formatValue(Math.abs(netI), 'A')
+              }
             />
           </div>
         ) : (
@@ -120,14 +150,18 @@ export default function Inspector(): JSX.Element {
 
   const def = ELEMENTS[component.type]
   const hasValue = def.defaultValue !== null
+  const isAcSource = component.type === 'ac_voltage_source'
 
   const commitValue = (): void => {
     const parsed = parseValue(valueText)
     if (parsed !== null && parsed > 0) {
       checkpoint()
       updateComponent(component.id, { value: parsed })
-    } else if (component.type === 'voltage_source' || component.type === 'current_source') {
-      // sources may be zero or negative
+    } else if (
+      component.type === 'voltage_source' ||
+      component.type === 'current_source' ||
+      component.type === 'ac_voltage_source'
+    ) {
       if (parsed !== null) {
         checkpoint()
         updateComponent(component.id, { value: parsed })
@@ -135,11 +169,29 @@ export default function Inspector(): JSX.Element {
     }
   }
 
+  const commitFreq = (): void => {
+    const parsed = parseValue(freqText)
+    if (parsed !== null && parsed > 0) {
+      checkpoint()
+      updateComponent(component.id, { frequency: parsed })
+    }
+  }
+
+  const commitPhase = (): void => {
+    const parsed = parseValue(phaseText)
+    if (parsed !== null) {
+      checkpoint()
+      updateComponent(component.id, { phase: parsed })
+    }
+  }
+
   const current = simResult?.elementCurrents[component.id]
-  const terminalVoltages = def.terminals.map((t, i) => {
+  const currentPhase = simResult?.elementCurrentPhase?.[component.id] ?? 0
+  const terminalReadings = def.terminals.map((t, i) => {
     const node = simResult?.terminalNodes[terminalKey(component.id, i)]
     const v = node !== undefined ? simResult?.nodeVoltages[node] : undefined
-    return { index: i, name: t.name, voltage: v }
+    const ph = node !== undefined ? simResult?.nodeVoltagePhase?.[node] : undefined
+    return { index: i, name: t.name, voltage: v, phase: ph }
   })
 
   return (
@@ -152,7 +204,7 @@ export default function Inspector(): JSX.Element {
       {hasValue && (
         <label className="block mb-3">
           <span className="text-xs text-gray-500 dark:text-gray-400">
-            Value {def.unit && `(${def.unit})`}
+            {isAcSource ? 'Amplitude (V peak)' : `Value ${def.unit ? `(${def.unit})` : ''}`}
           </span>
           <input
             type="text"
@@ -167,6 +219,35 @@ export default function Inspector(): JSX.Element {
             Suffixes: G M k m µ n p — e.g. “4.7k”
           </span>
         </label>
+      )}
+
+      {isAcSource && (
+        <div className="flex gap-2 mb-3">
+          <label className="block flex-1">
+            <span className="text-xs text-gray-500 dark:text-gray-400">Frequency (Hz)</span>
+            <input
+              type="text"
+              value={freqText}
+              onChange={(e) => setFreqText(e.target.value)}
+              onBlur={commitFreq}
+              onKeyDown={(e) => e.key === 'Enter' && commitFreq()}
+              aria-label="AC frequency"
+              className="mt-1 w-full px-2 py-1 text-sm rounded border border-gray-300 dark:border-white/20 bg-white dark:bg-brand-dark text-gray-900 dark:text-gray-100"
+            />
+          </label>
+          <label className="block w-16">
+            <span className="text-xs text-gray-500 dark:text-gray-400">Phase °</span>
+            <input
+              type="text"
+              value={phaseText}
+              onChange={(e) => setPhaseText(e.target.value)}
+              onBlur={commitPhase}
+              onKeyDown={(e) => e.key === 'Enter' && commitPhase()}
+              aria-label="AC phase"
+              className="mt-1 w-full px-2 py-1 text-sm rounded border border-gray-300 dark:border-white/20 bg-white dark:bg-brand-dark text-gray-900 dark:text-gray-100"
+            />
+          </label>
+        </div>
       )}
 
       {component.type === 'switch' && (
@@ -197,18 +278,29 @@ export default function Inspector(): JSX.Element {
       </div>
 
       <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">
-        Measurements
+        Measurements {ac && <span className="text-brand-yellow">· AC (RMS)</span>}
       </p>
       {simResult?.solved ? (
         <div className="text-sm space-y-1">
           {current !== undefined && (
-            <Reading label="Current" value={formatValue(Math.abs(current), 'A')} />
+            <Reading
+              label="Current"
+              value={
+                ac ? acReading(current, currentPhase, 'A') : formatValue(Math.abs(current), 'A')
+              }
+            />
           )}
-          {terminalVoltages.map((t) => (
+          {terminalReadings.map((t) => (
             <Reading
               key={t.index}
               label={t.name ?? `Pin ${t.index + 1}`}
-              value={t.voltage !== undefined ? formatValue(t.voltage, 'V') : '—'}
+              value={
+                t.voltage === undefined
+                  ? '—'
+                  : ac
+                    ? acReading(t.voltage, t.phase ?? 0, 'V')
+                    : formatValue(t.voltage, 'V')
+              }
             />
           ))}
         </div>
