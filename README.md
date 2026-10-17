@@ -12,18 +12,19 @@ Volt combines Brilliant.org-style step-by-step interactive lessons with EveryCir
 
 ## Tech Stack
 
-React 18 + TypeScript + Tailwind CSS, wrapped in Electron for desktop (Windows/Mac) with an identical browser build. State via Zustand. Circuit simulation via a custom MNA (Modified Nodal Analysis) solver, designed to run in a Web Worker. Testing with Vitest.
+React 18 + TypeScript + Tailwind CSS, browser-first, with 3D views via three.js / React Three Fiber. An optional Electron wrapper builds a desktop app from the same code. State via Zustand. Circuit simulation via a custom MNA (Modified Nodal Analysis) solver, designed to run in a Web Worker. Testing with Vitest.
 
 ## Development
 
 ```bash
 npm install
 
-npm run dev        # Electron app (hot reload)
-npm run dev:web    # Browser only
+npm run dev          # Browser app (primary target) — open the printed URL
+npm run dev:desktop  # Optional Electron desktop wrapper
 npm test           # Unit tests
 npm run typecheck  # TS type checking
-npm run package    # Build distributable desktop app
+npm run build      # Production web build → dist/web
+npm run package    # Build distributable desktop app (optional)
 ```
 
 ## Project Structure

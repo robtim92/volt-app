@@ -29,7 +29,7 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Build (renderer only, skip Electron for CI)
-        run: npx vite build --config vite.web.config.ts
+      - name: Build (web)
+        run: npm run build
         env:
           NODE_ENV: production
