@@ -50,6 +50,7 @@ import {
   wirePath,
   type Pt
 } from '../../sim/wireRoute'
+import { junctionPoint } from '../../sim/junction'
 import type { SimulationResult } from '@stores/circuitStore'
 
 interface CircuitCanvasProps {
@@ -343,6 +344,8 @@ export default function CircuitCanvas({
   /** click-by-click wire routing: corners placed so far (null = not routing) */
   const routeRef = useRef<{ corners: Pt[] } | null>(null)
   const [routing, setRouting] = useState<number | null>(null)
+  /** pressed a junction dot: a tap starts a wire from it, a drag moves it */
+  const junctionPressRef = useRef<{ hit: TerminalHit; x0: number; y0: number } | null>(null)
   /** reshaping a wire: dragging one of its segments or corners */
   const wireEditRef = useRef<{
     wireId: string
@@ -493,6 +496,27 @@ export default function CircuitCanvas({
     cancelRoute()
   }
 
+  /** Finish the wire being drawn on the middle of another wire (adds a junction). */
+  const finishOnWire = (target: Wire, x: number, y: number): boolean => {
+    const start = wireStartRef.current
+    if (!start) return false
+    const corners = routeRef.current?.corners ?? []
+    const store = useCircuitStore.getState()
+    const id = store.connectToWire(
+      {
+        id: `w-${Date.now()}-${Math.floor(Math.random() * 1e4)}`,
+        fromComponentId: start.componentId,
+        fromTerminal: start.terminal,
+        points: corners.length ? corners.map((c) => ({ ...c })) : undefined
+      },
+      target.id,
+      x,
+      y
+    )
+    if (id) cancelRoute()
+    return id !== null
+  }
+
   const undoCorner = (): void => {
     const r = routeRef.current
     if (!r) return
@@ -539,6 +563,7 @@ export default function CircuitCanvas({
 
   const cancelGestures = (): void => {
     dragRef.current = null
+    junctionPressRef.current = null
     wireEditRef.current = null
     // click-by-click routing survives pinches and the pointer leaving the board
     if (!routeRef.current) wireStartRef.current = null
@@ -676,6 +701,8 @@ export default function CircuitCanvas({
         finishWire(end)
         return
       }
+      const onWire = findWireHit(x, y)
+      if (onWire && finishOnWire(onWire.wire, x, y)) return
       routeRef.current.corners.push({ x: snapToGrid(x), y: snapToGrid(y) })
       setRouting(routeRef.current.corners.length)
       return
@@ -683,6 +710,11 @@ export default function CircuitCanvas({
 
     const terminal = findTerminal(x, y)
     if (terminal) {
+      const owner = store.components.find((c) => c.id === terminal.componentId)
+      if (owner?.type === 'wire_node') {
+        junctionPressRef.current = { hit: terminal, x0: x, y0: y }
+        return
+      }
       wireStartRef.current = terminal
       return
     }
@@ -746,6 +778,16 @@ export default function CircuitCanvas({
     const { x, y } = canvasPoint(e)
     mouseRef.current = { x, y, inside: true }
 
+    const jp = junctionPressRef.current
+    if (jp) {
+      if (Math.hypot(x - jp.x0, y - jp.y0) < 6 / viewRef.current.scale) return
+      // moved: it's a drag of the junction itself
+      junctionPressRef.current = null
+      const st = useCircuitStore.getState()
+      st.selectComponent(jp.hit.componentId)
+      dragRef.current = { items: [{ id: jp.hit.componentId, dx: jp.hit.x - jp.x0, dy: jp.hit.y - jp.y0 }], checkpointed: false }
+    }
+
     const edit = wireEditRef.current
     if (edit) {
       if (!edit.moved) {
@@ -802,11 +844,24 @@ export default function CircuitCanvas({
       }
     }
 
+    const jp = junctionPressRef.current
+    if (jp) {
+      // tapped a junction: select it and start a wire from it
+      junctionPressRef.current = null
+      useCircuitStore.getState().selectComponent(jp.hit.componentId)
+      wireStartRef.current = jp.hit
+      routeRef.current = { corners: [] }
+      setRouting(0)
+    }
+
     const start = wireStartRef.current
     if (start && !routeRef.current) {
       const end = findTerminal(x, y)
+      const onWire = end ? null : findWireHit(x, y)
       if (end && !(end.componentId === start.componentId && end.terminal === start.terminal)) {
         finishWire(end)
+      } else if (onWire && finishOnWire(onWire.wire, x, y)) {
+        // joined onto the middle of a wire
       } else {
         // Tapped the terminal, or let go on the board: keep routing click by click
         routeRef.current = { corners: end ? [] : [{ x: snapToGrid(x), y: snapToGrid(y) }] }
@@ -1147,7 +1202,15 @@ export default function CircuitCanvas({
       if (wireStart) {
         const corners = routeRef.current?.corners ?? []
         const pts: Pt[] = [{ x: wireStart.x, y: wireStart.y }, ...corners]
-        if (mouseRef.current.inside) pts.push({ x: snapToGrid(mouseRef.current.x), y: snapToGrid(mouseRef.current.y) })
+        let tapPoint: Pt | null = null
+        if (mouseRef.current.inside) {
+          const mx = mouseRef.current.x
+          const my = mouseRef.current.y
+          const overWire = findTerminal(mx, my) ? null : findWireHit(mx, my)
+          const jp = overWire ? junctionPoint(overWire.path, mx, my) : null
+          tapPoint = jp ? jp.point : null
+          pts.push(tapPoint ?? { x: snapToGrid(mx), y: snapToGrid(my) })
+        }
         const startComp = byId.get(wireStart.componentId)
         const preview = orthogonalize(pts, startComp ? terminalDirection(startComp, wireStart.terminal) : null)
         ctx.strokeStyle = dark ? 'rgba(232,181,0,0.75)' : 'rgba(202,138,4,0.75)'
@@ -1161,6 +1224,14 @@ export default function CircuitCanvas({
           ctx.beginPath()
           ctx.arc(c.x, c.y, 3.5, 0, Math.PI * 2)
           ctx.fill()
+        }
+        if (tapPoint) {
+          // where the junction will go
+          ctx.strokeStyle = accent
+          ctx.lineWidth = 2
+          ctx.beginPath()
+          ctx.arc(tapPoint.x, tapPoint.y, 6, 0, Math.PI * 2)
+          ctx.stroke()
         }
       }
       ctx.lineCap = 'butt'
@@ -1308,6 +1379,10 @@ export default function CircuitCanvas({
           if (hovered || isWireOrigin) {
             ctx.fillStyle = accent
             ctx.fill()
+          } else if (comp.type === 'wire_node') {
+            // a junction is a solid solder dot
+            ctx.fillStyle = inkNeutral
+            ctx.fill()
           } else {
             ctx.fillStyle = bg
             ctx.fill()
@@ -1402,7 +1477,7 @@ export default function CircuitCanvas({
         data-testid="wire-routing-hint"
       >
         <span className="whitespace-nowrap overflow-hidden text-ellipsis">
-          {routing === 0 ? 'Tap the board to add corners, then a terminal to finish' : `${routing} corner${routing === 1 ? '' : 's'} · tap a terminal to finish`}
+          {routing === 0 ? 'Tap the board to add corners, then a terminal or a wire to finish' : `${routing} corner${routing === 1 ? '' : 's'} · tap a terminal or wire to finish`}
         </span>
         {routing > 0 && (
           <button onClick={undoCorner} className="px-2 py-0.5 rounded-full bg-white/15 hover:bg-white/25 whitespace-nowrap">

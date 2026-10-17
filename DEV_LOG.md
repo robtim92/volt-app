@@ -2,6 +2,25 @@
 
 ---
 
+## Junctions — tap into the middle of a wire
+**Date:** October 17, 2026
+
+### Shipped
+- **Finish a wire on another wire**: the target splits at the nearest grid point and a junction (solid
+  solder dot) joins all three. Both halves keep gauge, style, corners and their share of a set length.
+  The drawing preview shows where the junction will land.
+- **Junction dots**: tap one to start a wire from it, drag it to move it.
+- **Self-healing** (`sim/junction.ts`): deleting a branch leaves a junction joining two wires, which merge
+  back into one; deleting a junction that joins two wires merges them; empty junctions disappear. All undoable.
+
+### Test status
+298 tests passing · typecheck clean · web build OK · junctions checked in headless Chromium (desktop + phone).
+
+### Next
+Phase H — H1 residential panel.
+
+---
+
 ## Wire routing — bends, corners and curves
 **Date:** October 17, 2026
 

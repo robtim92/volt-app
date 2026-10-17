@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import type { CircuitComponent, ComponentType, Wire } from '../sim/elements'
+import { nextLabel, type CircuitComponent, type ComponentType, type Wire } from '../sim/elements'
+import { healJunctions, splitWire } from '../sim/junction'
 
 // Re-export the canonical circuit types so existing imports keep working
 export type { CircuitComponent, ComponentType, Wire }
@@ -70,6 +71,12 @@ interface CircuitState {
   toggleSwitch: (id: string) => void
   addWire: (wire: Wire) => void
   removeWire: (id: string) => void
+  /**
+   * Finish a wire on the middle of another wire: split that wire at a new
+   * junction and connect to it. Returns the junction's id (null if the point
+   * landed on the target wire's end).
+   */
+  connectToWire: (wire: Omit<Wire, 'toComponentId' | 'toTerminal'>, targetWireId: string, x: number, y: number) => string | null
   setSimResult: (result: SimulationResult | null) => void
   clearCircuit: () => void
   /** Replace the whole circuit (used by load/import) */
@@ -99,6 +106,37 @@ const pushPast = (s: CircuitState): Pick<CircuitState, 'past' | 'future'> => ({
   future: []
 })
 
+/**
+ * Remove parts and wires, then tidy the junctions they touched: a junction
+ * being deleted that joins exactly two wires merges them instead of cutting
+ * them, and a junction left joining two wires merges back into one wire.
+ */
+function removeAndHeal(
+  components: CircuitComponent[],
+  wires: Wire[],
+  componentIds: string[],
+  wireIds: string[]
+): { components: CircuitComponent[]; wires: Wire[] } {
+  const idSet = new Set(componentIds)
+  let g = { components, wires }
+  const merging = components.filter(
+    (c) => idSet.has(c.id) && c.type === 'wire_node' && wires.filter((w) => w.fromComponentId === c.id || w.toComponentId === c.id).length === 2
+  )
+  if (merging.length) {
+    g = healJunctions(g, new Set(merging.map((c) => c.id)))
+    for (const c of merging) if (!g.components.some((cc) => cc.id === c.id)) idSet.delete(c.id)
+  }
+  const removedWires = g.wires.filter(
+    (w) => wireIds.includes(w.id) || idSet.has(w.fromComponentId) || idSet.has(w.toComponentId)
+  )
+  const touched = new Set(removedWires.flatMap((w) => [w.fromComponentId, w.toComponentId]))
+  g = {
+    components: g.components.filter((c) => !idSet.has(c.id)),
+    wires: g.wires.filter((w) => !removedWires.includes(w))
+  }
+  return healJunctions(g, touched)
+}
+
 const clearedSelection = {
   selectedComponentId: null,
   selectedIds: [] as string[],
@@ -122,8 +160,7 @@ export const useCircuitStore = create<CircuitState>()((set) => ({
   removeComponent: (id) =>
     set((s) => ({
       ...pushPast(s),
-      components: s.components.filter((c) => c.id !== id),
-      wires: s.wires.filter((w) => w.fromComponentId !== id && w.toComponentId !== id),
+      ...removeAndHeal(s.components, s.wires, [id], []),
       selectedComponentId: s.selectedComponentId === id ? null : s.selectedComponentId,
       selectedIds: s.selectedIds.filter((sid) => sid !== id)
     })),
@@ -131,13 +168,9 @@ export const useCircuitStore = create<CircuitState>()((set) => ({
   removeComponents: (ids) =>
     set((s) => {
       if (ids.length === 0) return {}
-      const idSet = new Set(ids)
       return {
         ...pushPast(s),
-        components: s.components.filter((c) => !idSet.has(c.id)),
-        wires: s.wires.filter(
-          (w) => !idSet.has(w.fromComponentId) && !idSet.has(w.toComponentId)
-        ),
+        ...removeAndHeal(s.components, s.wires, ids, []),
         ...clearedSelection
       }
     }),
@@ -187,9 +220,23 @@ export const useCircuitStore = create<CircuitState>()((set) => ({
   removeWire: (id) =>
     set((s) => ({
       ...pushPast(s),
-      wires: s.wires.filter((w) => w.id !== id),
+      ...removeAndHeal(s.components, s.wires, [], [id]),
       selectedWireId: s.selectedWireId === id ? null : s.selectedWireId
     })),
+
+  connectToWire: (wire, targetWireId, x, y) => {
+    let junctionId: string | null = null
+    set((s) => {
+      const id = `wire_node-${Date.now()}-${Math.floor(Math.random() * 1e4)}`
+      const split = splitWire(s, targetWireId, x, y, id, nextLabel('wire_node', s.components))
+      if (!split) return s
+      junctionId = id
+      const w: Wire = { ...wire, toComponentId: id, toTerminal: 0 }
+      if (w.fromComponentId === id) return s
+      return { ...pushPast(s), components: split.components, wires: [...split.wires, w] }
+    })
+    return junctionId
+  },
 
   setSimResult: (result) => set({ simResult: result }),
 
