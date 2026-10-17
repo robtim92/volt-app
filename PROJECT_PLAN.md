@@ -211,10 +211,17 @@ stars, XP, ranks, badges, parts collection). Browser-first; Electron optional. S
 - [x] Step 3 — campaign, stars, XP, ranks, badges, parts collection
 - [x] Step 4 — Chapter 1 "Light It Up" (5 levels), verified end-to-end
 - [ ] Step 5 — realistic wires (AWG gauge always on, default 22 AWG; resistance, ampacity, melting) and power sources (battery chemistries with internal resistance, bench supply with current limit); first "zoom inside" view (electron drift)
+- [ ] Phase H — home power systems (after Step 5, before Step 6): a second simulation mode (power flow + fast-forward clock) alongside the bench sim; US 120/240 V split-phase, simplified code rules; one-line diagram + 3D house (floor-plan editor deferred)
+    - H1 residential panel: split-phase service, main/branch breakers (single/double-pole, GFCI/AFCI), wire runs with gauge + length, appliance library (start-up surges, cycling), live panel view, 200 A load calc
+    - H2 time & energy: day/week clock, schedules, kWh metering, time-of-use rates and bill, dashboard (power-flow diagram, 24 h load curve, peak demand)
+    - H3 solar: datasheet panel model with temperature effects, strings, partial shading, sun position by location/date (clear-sky + cloudy presets), charge controllers, grid-tie/hybrid/off-grid inverters with clipping; 3D roof panels + moving sun
+    - H4 storage & backup: battery banks (lead-acid, LiFePO4) with state of charge, rate limits, losses; outages, islanding, critical-loads subpanel, generator + transfer switch
+    - H5 examples + Home Power chapter: starter home, EV charger panel upgrade, long run to a shed, grid-tie net-zero, off-grid cabin, outage night
 - [ ] Step 6 — electromagnet/coil component built from turns, gauge, length/diameter and core (air, iron, ferrite, steel): derived R, L, field, heat; core saturation as a nonlinear inductor; field lines + compass grid in 3D
 - [ ] Step 7 — permanent magnets, iron objects (paperclips, nails) with lift force; Biot–Savart field view in a worker
 - [ ] Step 8 — induction (Faraday EMF from moving magnets), coupled coils / real transformer, relay, solenoid, DC motor
-- Gate before more content: Steps 5–8 tests green and every lesson and level still passes. Then: Ch 2 Time & Diodes → Ch 3 Magnetism → Ch 4 Induction → AC chapters → digital track. Polish alongside: drag-to-place in 3D, remaining zoom-inside views, transistors in the time-domain solver.
+- Gate before more content: Step 5, Phase H and Steps 6–8 tests green and every lesson and level still passes. Then: Ch 2 Time & Diodes → Ch 3 Magnetism → Ch 4 Induction → AC and Home Power chapters → digital track. Polish alongside: drag-to-place in 3D, remaining zoom-inside views, transistors in the time-domain solver.
+- Decision (Oct 17, 2026): add home power systems (Phase H) after Step 5 and before the electromagnet work; US-only to start.
 - Decision (Oct 17, 2026): finish the simulation environment before pushing learning modules further; magnetics use analytic coil models + Biot–Savart (~10–20% of real hobby builds), no full 3D FEM.
 
 ### Phase 5 — Digital Track + Polish (~8 weeks)
