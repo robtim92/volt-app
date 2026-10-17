@@ -1,6 +1,9 @@
 import { useUIStore } from '@stores/uiStore'
+import { useGameStore } from '@stores/gameStore'
+import { rankFor } from '../../game/progression'
 
 const panelTitles: Record<string, string> = {
+  campaign:  'Campaign',
   lessons:   'Lessons',
   sandbox:   'Sandbox',
   dashboard: 'Dashboard',
@@ -14,7 +17,9 @@ const trackLabels: Record<string, string> = {
 }
 
 export default function TopBar(): JSX.Element {
-  const { activePanel, activeTrack } = useUIStore()
+  const { activePanel, activeTrack, setActivePanel } = useUIStore()
+  const xp = useGameStore((s) => s.xp)
+  const { rank } = rankFor(xp)
 
   return (
     <header className="h-12 shrink-0 flex items-center px-4 gap-2 border-b border-gray-200 dark:border-white/10 bg-white dark:bg-brand-dark">
@@ -30,10 +35,14 @@ export default function TopBar(): JSX.Element {
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Phase badge — placeholder until real progress exists */}
-      <span className="text-xs px-2 py-0.5 rounded-full bg-brand-yellow/10 text-brand-yellow font-medium">
-        Phase 1 · MVP
-      </span>
+      {/* Rank + XP chip → campaign */}
+      <button
+        onClick={() => setActivePanel('campaign')}
+        title="Your rank — open the campaign"
+        className="text-xs px-2.5 py-0.5 rounded-full bg-brand-yellow/10 text-brand-yellow font-medium hover:bg-brand-yellow/20"
+      >
+        {rank.icon} {rank.title} · {xp} XP
+      </button>
     </header>
   )
 }

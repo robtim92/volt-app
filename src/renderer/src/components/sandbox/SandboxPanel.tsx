@@ -4,6 +4,11 @@ import { useLessonStore } from '@stores/lessonStore'
 import { useUIStore } from '@stores/uiStore'
 import { useSimulation } from '../../hooks/useSimulation'
 import { useLiveSimulation } from '../../hooks/useLiveSimulation'
+import { useLevelRunner } from '../../hooks/useLevelRunner'
+import LevelHUD from '../campaign/LevelHUD'
+import LevelComplete from '../campaign/LevelComplete'
+import BadgeToast from '../campaign/BadgeToast'
+import { getLevel } from '../../game/levels'
 import {
   deleteCircuit,
   exportCircuitJSON,
@@ -29,6 +34,7 @@ export default function SandboxPanel(): JSX.Element {
   // engine owns the result for everything else.
   useSimulation({ steadyDC: false })
   useLiveSimulation()
+  useLevelRunner()
 
   const [pendingType, setPendingType] = useState<ComponentType | null>(null)
   const [circuitName, setCircuitName] = useState('')
@@ -49,6 +55,8 @@ export default function SandboxPanel(): JSX.Element {
   const scopeOpen = useUIStore((s) => s.scopeOpen)
   const toggleScope = useUIStore((s) => s.toggleScope)
   const benchView = useUIStore((s) => s.benchView)
+  const activeLevelId = useUIStore((s) => s.activeLevelId)
+  const activeLevel = activeLevelId ? getLevel(activeLevelId) : undefined
 
   const activeCircuitQuiz = useUIStore((s) => s.activeCircuitQuiz)
   const setCircuitQuizResult = useUIStore((s) => s.setCircuitQuizResult)
@@ -168,7 +176,8 @@ export default function SandboxPanel(): JSX.Element {
   } else if (!simResult) {
     status = { text: 'Simulating…', tone: 'idle' }
   } else if (!simResult.solved) {
-    status = { text: simResult.error ?? 'Cannot solve circuit', tone: 'error' }
+    const text = simResult.error ?? 'Cannot solve circuit'
+    status = { text, tone: text.startsWith('Nothing is connected') ? 'idle' : 'error' }
   } else if (simResult.warnings.length > 0) {
     status = { text: `${solvedPrefix} · ${simResult.warnings[0]}`, tone: 'warn' }
   } else {
@@ -187,7 +196,7 @@ export default function SandboxPanel(): JSX.Element {
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
-      <div className="h-11 shrink-0 flex items-center gap-2 px-3 border-b border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-brand-navy/40">
+      <div className="h-11 shrink-0 flex items-center gap-2 px-3 overflow-x-auto [&>*]:shrink-0 [&_button]:whitespace-nowrap border-b border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-brand-navy/40">
         <input
           type="text"
           placeholder="Circuit name"
@@ -296,6 +305,8 @@ export default function SandboxPanel(): JSX.Element {
         </button>
       </div>
 
+      {activeLevel && <LevelHUD />}
+
       {/* Quiz Mode Banner */}
       {activeCircuitQuiz && (
         <div className="shrink-0 border-b border-brand-yellow/40 bg-brand-yellow/5 dark:bg-brand-yellow/10 px-4 py-3 flex flex-col gap-2">
@@ -361,10 +372,12 @@ export default function SandboxPanel(): JSX.Element {
         <Palette
           pendingType={pendingType}
           onPick={setPendingType}
-          allowedTypes={activeCircuitQuiz?.card.allowedComponents}
+          allowedTypes={activeLevel?.palette ?? activeCircuitQuiz?.card.allowedComponents}
         />
         <div className="flex-1 min-w-0 relative flex">
           <FailureToast />
+          <BadgeToast />
+          <LevelComplete />
           {benchView !== '3d' && (
             <div className={`relative min-w-0 ${benchView === 'split' ? 'w-1/2 border-r border-gray-200 dark:border-white/10' : 'flex-1'}`}>
               <CircuitCanvas

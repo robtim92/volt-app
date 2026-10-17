@@ -3,8 +3,10 @@ import SandboxPanel from '@components/sandbox/SandboxPanel'
 import LessonsPanel from '@components/lessons/LessonsPanel'
 import DashboardPanel from '@components/dashboard/DashboardPanel'
 import SettingsPanel from '@components/settings/SettingsPanel'
+import CampaignPanel from '@components/campaign/CampaignPanel'
 
 const panels: Record<string, JSX.Element> = {
+  campaign: <CampaignPanel />,
   lessons: <LessonsPanel />,
   sandbox: <SandboxPanel />,
   dashboard: <DashboardPanel />,

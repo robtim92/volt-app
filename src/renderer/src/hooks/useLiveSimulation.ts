@@ -40,13 +40,18 @@ function toSimResult(
   for (const [id, i] of Object.entries(snap.elementCurrents)) {
     if (!isInternal(id)) elementCurrents[id] = i
   }
+  let error = sim.error ?? snap.error
+  if (error === 'Circuit is empty') {
+    // parts placed but nothing wired yet — guide rather than scold
+    error = 'Nothing is connected yet — drag from one terminal dot to another to add a wire'
+  }
   return {
     solved: sim.error === null && snap.solved,
     nodeVoltages: snap.nodeVoltages,
     elementCurrents,
     terminalNodes,
     warnings,
-    error: sim.error ?? snap.error,
+    error,
     live: true,
     time: snap.time
   }

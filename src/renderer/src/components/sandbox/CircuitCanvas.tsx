@@ -312,6 +312,44 @@ export default function CircuitCanvas({
   const pendingRef = useRef<ComponentType | null>(pendingType)
   pendingRef.current = pendingType
 
+  /** Zoom/pan so the whole circuit fits the canvas (no-op for an empty circuit). */
+  const fitView = (): void => {
+    const canvas = canvasRef.current
+    const { components } = useCircuitStore.getState()
+    if (!canvas || components.length === 0) return
+    const rect = canvas.getBoundingClientRect()
+    if (rect.width < 10 || rect.height < 10) return
+    const xs = components.map((c) => c.x)
+    const ys = components.map((c) => c.y)
+    const minX = Math.min(...xs) - 70
+    const maxX = Math.max(...xs) + 70
+    const minY = Math.min(...ys) - 70
+    const maxY = Math.max(...ys) + 70
+    const scale = Math.max(MIN_ZOOM, Math.min(1.25, rect.width / (maxX - minX), rect.height / (maxY - minY)))
+    viewRef.current = {
+      scale,
+      ox: rect.width / 2 - ((minX + maxX) / 2) * scale,
+      oy: rect.height / 2 - ((minY + maxY) / 2) * scale
+    }
+  }
+
+  // Re-frame on mount (e.g. switching views) and whenever a circuit is loaded
+  useEffect(() => {
+    const t = setTimeout(fitView, 0)
+    let token = useCircuitStore.getState().loadToken
+    const unsub = useCircuitStore.subscribe((s) => {
+      if (s.loadToken !== token) {
+        token = s.loadToken
+        setTimeout(fitView, 0)
+      }
+    })
+    return () => {
+      clearTimeout(t)
+      unsub()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // ── Coordinate transforms ──
   const screenToWorld = (sx: number, sy: number): { x: number; y: number } => {
     const v = viewRef.current
@@ -590,6 +628,8 @@ export default function CircuitCanvas({
         }
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedIds.length > 0) store.removeComponents(selectedIds)
+      } else if (e.key === 'f' || e.key === 'F') {
+        fitView()
       } else if (e.key === '0') {
         viewRef.current = { ox: 0, oy: 0, scale: 1 } // reset view
       }

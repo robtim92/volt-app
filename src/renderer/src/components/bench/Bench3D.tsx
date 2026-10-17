@@ -85,7 +85,7 @@ function Framer({ token, controls }: { token: number; controls: React.RefObject<
     const aspect = size.width / Math.max(1, size.height)
     // distance that fits the circuit vertically, widened for narrow viewports
     const fit = (b.size / 2 + 0.8) / Math.tan(fov / 2)
-    const dist = (fit / Math.min(1, aspect)) * 0.95
+    const dist = (fit / Math.min(1, aspect)) * 1.05
     camera.position.set(b.center[0], dist * 0.82, b.center[2] + dist * 0.6)
     controls.current?.target.set(b.center[0], 0, b.center[2])
     controls.current?.update()

@@ -50,6 +50,7 @@ export default function Sidebar(): JSX.Element {
           Navigate
         </p>
         {[
+          { id: 'campaign' as const, icon: '🎮', label: 'Campaign' },
           { id: 'lessons' as const,  icon: '📖', label: 'Lessons' },
           { id: 'sandbox' as const,  icon: '🔬', label: 'Sandbox' },
           { id: 'dashboard' as const,icon: '📊', label: 'Dashboard' }

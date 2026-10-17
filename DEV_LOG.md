@@ -2,6 +2,48 @@
 
 ---
 
+## Gamified 3D Lab — Steps 0–4 (live sim, heat/damage, 3D bench, campaign)
+**Date:** October 17, 2026
+
+Direction change agreed with Tim: make Volt a visual, gamified lab. 3D is a *companion* view of the
+schematic (not the only editor); browser-first with Electron optional; audience stays the curious adult
+hobbyist; chem-sim stays a separate project.
+
+### Shipped
+- **Step 0** — committed the abandoned Phase 4E AC lessons; `npm run dev`/`build` now target the browser
+  (Electron → `dev:desktop`/`build:desktop`); added three.js + React Three Fiber 8 + drei 9 (React 18).
+- **Step 1 — live time-domain simulation** (`sim/transient.ts`): transient MNA with trapezoidal
+  companion models for C/L (backward-Euler restart after topology changes), per-step Newton-Raphson
+  diodes, sine sources, inductive-kickback arcs, state carried across edits. `useLiveSimulation` runs it on
+  rAF with play/pause, time scale (1/1000× … 4×) and reset; it owns `simResult` for non-AC circuits
+  (AC circuits keep the phasor result). Ground is auto-referenced at the source's (−) terminal.
+- **Heat & damage** (`sim/thermal.ts`): first-order thermal model per part — resistors burn (¼ W
+  default), LEDs pop (30 mA), capacitors blow (50 V), ammeter fuses blow (10 A), breakers/GFCIs trip
+  open. Teaching toast explains each failure; Inspector shows temperature bar, rating, "Replace part".
+- **Live scope**: strip-chart of node voltages vs. simulated time (cap charging, blinking, rectifying).
+- **Step 2 — 3D workbench** (`components/bench/`): lazy-loaded R3F scene mirroring the schematic —
+  colour-coded resistors, electrolytic/ceramic caps, LEDs that light the bench, battery, switches,
+  breakers, meters with live readouts, voltage-coloured jumpers with flowing charge, sparks and smoke on
+  failure, bloom. Schematic / Split / 3D toggle (persisted).
+- **Step 3 — campaign layer** (`game/`, `stores/gameStore.ts`): levels with live goals + hold timer,
+  ★2/★3 criteria (clean run, part count, current band, supply current), XP + 5 ranks, 5 badges, parts
+  collection, map with unlocks, mission HUD with progressive hints, completion card with debrief.
+- **Step 4 — Chapter 1 "Light It Up"**: Close the Loop · Let the Smoke Out · Chain Reaction (series) ·
+  Branch Out (parallel) · Afterglow (RC). Every level ships a reference solution the tests play through
+  the live sim (must earn 3 stars) and a check that the starter isn't already solved.
+- Misc: values read "10 mA"/"4.7 kΩ"; schematic auto-fits loaded circuits (F to fit); rank/XP chip in
+  the top bar; dev-only `window.__volt` handle for E2E.
+
+### Test status
+219 tests passing · typecheck clean · web build OK (3D code in its own ~250 kB gz chunk) · all 5 levels
+played end-to-end in headless Chromium.
+
+### Next
+Step 5: "zoom inside" views (electron drift, capacitor plates, inductor field), drag-to-place in 3D,
+Chapter 2 (capacitors/RC timing, diodes) and AC chapters; then digital track as planned.
+
+---
+
 ## Phase 3 (partial) — Circuit-Completion Quiz System
 **Commit:** `4bb91ba` · **Date:** June 13, 2026
 

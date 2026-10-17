@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware'
 import type { CircuitQuizCard } from '../lessons/types'
 
 type Track = 'dc' | 'ac' | 'digital'
-type Panel = 'lessons' | 'sandbox' | 'dashboard' | 'settings'
+type Panel = 'campaign' | 'lessons' | 'sandbox' | 'dashboard' | 'settings'
 export type BenchView = '2d' | 'split' | '3d'
 
 export interface ActiveCircuitQuiz {
@@ -33,6 +33,8 @@ interface UIState {
   activeCircuitQuiz: ActiveCircuitQuiz | null
   /** Sandbox view: schematic, 3D bench, or both side by side (persisted). */
   benchView: BenchView
+  /** Campaign level being played in the sandbox (transient). */
+  activeLevelId: string | null
 
   toggleDarkMode: () => void
   setActiveTrack: (track: Track) => void
@@ -43,6 +45,8 @@ interface UIState {
   setScopeOpen: (open: boolean) => void
   toggleScope: () => void
   setBenchView: (view: BenchView) => void
+  startLevel: (id: string) => void
+  exitLevel: () => void
   completeOnboarding: () => void
   startCircuitQuiz: (lessonId: string, cardIndex: number, card: CircuitQuizCard) => void
   setCircuitQuizResult: (passed: boolean, failures: string[]) => void
@@ -55,13 +59,14 @@ export const useUIStore = create<UIState>()(
       // Defaults
       darkMode: false,
       activeTrack: 'dc',
-      activePanel: 'sandbox',
+      activePanel: 'campaign',
       sidebarOpen: true,
       hasOnboarded: false,
       aiPanelOpen: false,
       scopeOpen: false,
       activeCircuitQuiz: null,
       benchView: 'split',
+      activeLevelId: null,
 
       // Actions
       toggleDarkMode: () => set((s) => ({ darkMode: !s.darkMode })),
@@ -73,10 +78,13 @@ export const useUIStore = create<UIState>()(
       setScopeOpen: (open) => set({ scopeOpen: open }),
       toggleScope: () => set((s) => ({ scopeOpen: !s.scopeOpen })),
       setBenchView: (benchView) => set({ benchView }),
+      startLevel: (id) => set({ activeLevelId: id, activeCircuitQuiz: null, activePanel: 'sandbox' }),
+      exitLevel: () => set({ activeLevelId: null }),
       completeOnboarding: () => set({ hasOnboarded: true }),
       startCircuitQuiz: (lessonId, cardIndex, card) =>
         set({
           activeCircuitQuiz: { lessonId, cardIndex, card, attempts: 0, passed: false, failures: [] },
+          activeLevelId: null,
           activePanel: 'sandbox'
         }),
       setCircuitQuizResult: (passed, failures) =>

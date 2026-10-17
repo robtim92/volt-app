@@ -8,7 +8,7 @@ Volt combines Brilliant.org-style step-by-step interactive lessons with EveryCir
 
 ## Status
 
-🚧 **Phase 1 — Simulator Core (in progress).** See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the full scope and roadmap, and `volt_project_plan_v1.2.docx` for the original master plan.
+🚧 **Gamified 3D Lab** — live time-domain simulation with burnable parts, a 3D workbench view, and a campaign (Chapter 1: *Light It Up*). See [PROJECT_PLAN.md](PROJECT_PLAN.md) for the full scope and roadmap, and `volt_project_plan_v1.2.docx` for the original master plan.
 
 ## Tech Stack
 

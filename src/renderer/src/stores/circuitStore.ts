@@ -45,6 +45,8 @@ interface CircuitState {
   components: CircuitComponent[]
   wires: Wire[]
   simResult: SimulationResult | null
+  /** Increments whenever a whole circuit is loaded (views re-frame on change). */
+  loadToken: number
 
   // ── Selection ──
   /** Primary selected component (drives the single-component Inspector). */
@@ -105,6 +107,7 @@ export const useCircuitStore = create<CircuitState>()((set) => ({
   components: [],
   wires: [],
   simResult: null,
+  loadToken: 0,
   selectedComponentId: null,
   selectedIds: [],
   selectedWireId: null,
@@ -200,6 +203,7 @@ export const useCircuitStore = create<CircuitState>()((set) => ({
       components,
       wires,
       simResult: null,
+      loadToken: s.loadToken + 1,
       ...clearedSelection
     })),
 

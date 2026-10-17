@@ -201,6 +201,17 @@ Internally: `buildNetlist(components, wires)` → `solveDC(netlist)` → evaluat
 - Oscilloscope/waveform view; AC component library (transformer, breaker, GFCI models)
 - AC track content + guided labs with the mandated safety disclaimer; NEC reference module; AC quizzes
 
+### Gamified 3D Lab (Oct 2026) — 🚧 Steps 0–4 ✅
+Agreed scope (Oct 17, 2026): keep the solver and app; add a live time-domain simulator with heat/damage,
+a 3D workbench as a companion view of the schematic (React Three Fiber), and a campaign layer (levels,
+stars, XP, ranks, badges, parts collection). Browser-first; Electron optional. See DEV_LOG.md.
+- [x] Step 0 — commit AC lessons WIP, browser-first build, three.js/R3F deps
+- [x] Step 1 — transient simulation + thermal/damage model + live scope
+- [x] Step 2 — 3D workbench linked to the schematic
+- [x] Step 3 — campaign, stars, XP, ranks, badges, parts collection
+- [x] Step 4 — Chapter 1 "Light It Up" (5 levels), verified end-to-end
+- [ ] Step 5 — "zoom inside" views, 3D direct manipulation, Chapter 2+ and AC chapters
+
 ### Phase 5 — Digital Track + Polish (~8 weeks)
 - Event-driven logic simulator with propagation delay; clocked sequential update
 - Truth table panel, logic-level wire display, timing diagram view; digital component library
