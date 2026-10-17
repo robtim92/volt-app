@@ -56,6 +56,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
           { id: 'campaign' as const, icon: '🎮', label: 'Campaign' },
           { id: 'lessons' as const,  icon: '📖', label: 'Lessons' },
           { id: 'sandbox' as const,  icon: '🔬', label: 'Sandbox' },
+          { id: 'home' as const,     icon: '🏠', label: 'Home Power' },
           { id: 'dashboard' as const,icon: '📊', label: 'Dashboard' }
         ].map((item) => (
           <button

@@ -6,6 +6,7 @@ const panelTitles: Record<string, string> = {
   campaign:  'Campaign',
   lessons:   'Lessons',
   sandbox:   'Sandbox',
+  home:      'Home Power',
   dashboard: 'Dashboard',
   settings:  'Settings'
 }

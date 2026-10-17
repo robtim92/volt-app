@@ -2,6 +2,35 @@
 
 ---
 
+## Phase H1 — Home Power: residential panel
+**Date:** October 17, 2026
+
+### Shipped
+- **Home workspace** (sidebar → 🏠 Home Power): panel on the left, one-line diagram or 3D house in the
+  middle, circuit card on the right; tabs on phones. Clock with play/pause and 1×/10×/60×/600× speed.
+- **Model** (`home/`): US 120/240 V split-phase service; panel rows alternate legs A/B; single- and
+  double-pole breakers; standard, GFCI, AFCI and dual-function protection; wire runs with gauge and
+  length (copper, both conductors); appliance library (25 appliances) with motor in-rush and self-cycling
+  fridges, AC, water heaters and compressors.
+- **Simulation** (`home/homeSim.ts`): per-circuit solve with wire voltage drop (impedance loads +
+  constant-power electronics); thermal breaker curve (heat ∝ I², τ 120 s, trips ≈ 114% held), magnetic
+  trip at 10×; GFCI trips on a 100 mA ground leak; AFCI on arcing; main breaker on the heavier leg; leg and
+  neutral currents; kWh metering.
+- **Warnings**: breaker larger than its wire, voltage drop over 3%, wrong-voltage appliances, unprotected
+  ground/arc faults, and labelled simplified code notes (GFCI/AFCI rooms).
+- **Service load calculation** (simplified NEC 220.82 optional method) against the service rating.
+- **Placeholder 3D house**: a room per circuit room; rooms light with their lighting loads, glow with
+  power, and turn red when their circuit trips.
+- **Examples**: "Starter home: the breakfast trip" and "A long run to the shed", with guides.
+
+### Test status
+314 tests passing · typecheck clean · web build OK · Home workspace checked in headless Chromium (desktop + phone).
+
+### Next
+H2 — time & energy (schedules, kWh, time-of-use bill, load curve).
+
+---
+
 ## Junctions — tap into the middle of a wire
 **Date:** October 17, 2026
 

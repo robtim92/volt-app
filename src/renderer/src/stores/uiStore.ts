@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware'
 import type { CircuitQuizCard } from '../lessons/types'
 
 type Track = 'dc' | 'ac' | 'digital'
-type Panel = 'campaign' | 'lessons' | 'sandbox' | 'dashboard' | 'settings'
+type Panel = 'campaign' | 'lessons' | 'sandbox' | 'home' | 'dashboard' | 'settings'
 export type BenchView = '2d' | 'split' | '3d'
 
 export interface ActiveCircuitQuiz {

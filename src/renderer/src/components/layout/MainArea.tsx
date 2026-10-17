@@ -4,11 +4,13 @@ import LessonsPanel from '@components/lessons/LessonsPanel'
 import DashboardPanel from '@components/dashboard/DashboardPanel'
 import SettingsPanel from '@components/settings/SettingsPanel'
 import CampaignPanel from '@components/campaign/CampaignPanel'
+import HomeWorkspace from '@components/home/HomeWorkspace'
 
 const panels: Record<string, JSX.Element> = {
   campaign: <CampaignPanel />,
   lessons: <LessonsPanel />,
   sandbox: <SandboxPanel />,
+  home: <HomeWorkspace />,
   dashboard: <DashboardPanel />,
   settings: <SettingsPanel />
 }
