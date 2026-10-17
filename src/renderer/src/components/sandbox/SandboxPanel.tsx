@@ -27,6 +27,8 @@ import Oscilloscope from './Oscilloscope'
 import SimControls from './SimControls'
 import FailureToast from './FailureToast'
 import ViewToggle from './ViewToggle'
+import ExamplesGallery from '../examples/ExamplesGallery'
+import ExampleGuide from '../examples/ExampleGuide'
 
 const Bench3D = lazy(() => import('../bench/Bench3D'))
 
@@ -59,6 +61,7 @@ export default function SandboxPanel(): JSX.Element {
   const mobile = useIsMobile()
   const activeLevelId = useUIStore((s) => s.activeLevelId)
   const activeLevel = activeLevelId ? getLevel(activeLevelId) : undefined
+  const setExamplesOpen = useUIStore((s) => s.setExamplesOpen)
 
   const activeCircuitQuiz = useUIStore((s) => s.activeCircuitQuiz)
   const setCircuitQuizResult = useUIStore((s) => s.setCircuitQuizResult)
@@ -235,6 +238,15 @@ export default function SandboxPanel(): JSX.Element {
         >
           Delete
         </button>
+        {!activeLevel && (
+          <button
+            onClick={() => setExamplesOpen(true)}
+            title="Browse example circuits"
+            className="px-2 py-1 text-sm rounded bg-sky-500/15 text-sky-700 dark:text-sky-300 hover:bg-sky-500/25 font-medium"
+          >
+            📚<span className="hidden md:inline"> Examples</span>
+          </button>
+        )}
         <div className="flex-1" />
         <ViewToggle />
         <button
@@ -308,6 +320,8 @@ export default function SandboxPanel(): JSX.Element {
       </div>
 
       {activeLevel && <LevelHUD />}
+      {!activeLevel && !activeCircuitQuiz && <ExampleGuide />}
+      <ExamplesGallery />
 
       {/* Quiz Mode Banner */}
       {activeCircuitQuiz && (
@@ -380,6 +394,22 @@ export default function SandboxPanel(): JSX.Element {
         <div className={`flex-1 min-w-0 min-h-0 relative flex flex-col md:flex-row ${mobile ? 'order-first' : ''}`}>
           <FailureToast />
           <BadgeToast />
+          {components.length === 0 && !pendingType && !activeLevel && !activeCircuitQuiz && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none p-4">
+              <div className="pointer-events-auto text-center max-w-xs rounded-2xl border border-dashed border-gray-300 dark:border-white/15 bg-white/80 dark:bg-brand-dark/80 px-5 py-4">
+                <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Empty board</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Pick a part to start building, or load a ready-made circuit with a guided walkthrough.
+                </p>
+                <button
+                  onClick={() => setExamplesOpen(true)}
+                  className="mt-3 px-3 py-1.5 text-sm rounded-lg bg-sky-500 text-white font-medium hover:bg-sky-600"
+                >
+                  Browse example circuits
+                </button>
+              </div>
+            </div>
+          )}
           <LevelComplete />
           {benchView !== '3d' && (
             <div className={`relative min-w-0 min-h-0 ${benchView === 'split' ? 'h-1/2 md:h-auto md:w-1/2 border-b md:border-b-0 md:border-r border-gray-200 dark:border-white/10' : 'flex-1'}`}>

@@ -65,6 +65,8 @@ export interface ElectricalReadings {
   nodeVoltages: Record<string, number>
   elementCurrents: Record<string, number>
   terminalNodes: Record<string, string>
+  /** frame-averaged figures from the transient solver (preferred when present) */
+  stats?: { power: Record<string, number>; irms: Record<string, number>; vpeak: Record<string, number> }
 }
 
 /** Instantaneous stress and load q for a component, or null if it has no thermal model. */
@@ -80,16 +82,19 @@ export function componentLoad(
   const va = r.nodeVoltages[r.terminalNodes[terminalKey(c.id, 0)]] ?? 0
   const vb = r.nodeVoltages[r.terminalNodes[terminalKey(c.id, 1)]] ?? 0
   const v = va - vb
+  // Prefer averages over the whole frame (true RMS / mean power / peak), so AC
+  // heating doesn't depend on where in the cycle the frame landed.
+  const st = r.stats
   let stress: number
   switch (prof.stress) {
     case 'power':
-      stress = Math.abs(v * i)
+      stress = st?.power[c.id] ?? Math.abs(v * i)
       break
     case 'current':
-      stress = Math.abs(i)
+      stress = st?.irms[c.id] ?? Math.abs(i)
       break
     case 'voltage':
-      stress = Math.abs(v)
+      stress = st?.vpeak[c.id] ?? Math.abs(v)
       break
   }
   return { q: stress / rating, stress }

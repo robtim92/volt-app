@@ -35,6 +35,12 @@ interface UIState {
   benchView: BenchView
   /** Campaign level being played in the sandbox (transient). */
   activeLevelId: string | null
+  /** Example circuit whose guide is showing (transient). */
+  activeExampleId: string | null
+  /** Current step in the example guide. */
+  exampleStep: number
+  /** Whether the examples gallery is open. */
+  examplesOpen: boolean
 
   toggleDarkMode: () => void
   setActiveTrack: (track: Track) => void
@@ -47,6 +53,10 @@ interface UIState {
   setBenchView: (view: BenchView) => void
   startLevel: (id: string) => void
   exitLevel: () => void
+  setExamplesOpen: (open: boolean) => void
+  openExample: (id: string) => void
+  closeExample: () => void
+  setExampleStep: (step: number) => void
   completeOnboarding: () => void
   startCircuitQuiz: (lessonId: string, cardIndex: number, card: CircuitQuizCard) => void
   setCircuitQuizResult: (passed: boolean, failures: string[]) => void
@@ -67,6 +77,9 @@ export const useUIStore = create<UIState>()(
       activeCircuitQuiz: null,
       benchView: 'split',
       activeLevelId: null,
+      activeExampleId: null,
+      exampleStep: 0,
+      examplesOpen: false,
 
       // Actions
       toggleDarkMode: () => set((s) => ({ darkMode: !s.darkMode })),
@@ -78,13 +91,27 @@ export const useUIStore = create<UIState>()(
       setScopeOpen: (open) => set({ scopeOpen: open }),
       toggleScope: () => set((s) => ({ scopeOpen: !s.scopeOpen })),
       setBenchView: (benchView) => set({ benchView }),
-      startLevel: (id) => set({ activeLevelId: id, activeCircuitQuiz: null, activePanel: 'sandbox' }),
+      startLevel: (id) =>
+        set({ activeLevelId: id, activeCircuitQuiz: null, activeExampleId: null, activePanel: 'sandbox' }),
+      setExamplesOpen: (examplesOpen) => set({ examplesOpen }),
+      openExample: (id) =>
+        set({
+          activeExampleId: id,
+          exampleStep: 0,
+          examplesOpen: false,
+          activeLevelId: null,
+          activeCircuitQuiz: null,
+          activePanel: 'sandbox'
+        }),
+      closeExample: () => set({ activeExampleId: null, exampleStep: 0 }),
+      setExampleStep: (exampleStep) => set({ exampleStep }),
       exitLevel: () => set({ activeLevelId: null }),
       completeOnboarding: () => set({ hasOnboarded: true }),
       startCircuitQuiz: (lessonId, cardIndex, card) =>
         set({
           activeCircuitQuiz: { lessonId, cardIndex, card, attempts: 0, passed: false, failures: [] },
           activeLevelId: null,
+          activeExampleId: null,
           activePanel: 'sandbox'
         }),
       setCircuitQuizResult: (passed, failures) =>

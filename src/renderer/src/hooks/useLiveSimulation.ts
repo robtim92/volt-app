@@ -18,7 +18,7 @@
 import { useEffect, useRef } from 'react'
 import { useCircuitStore, type SimulationResult } from '@stores/circuitStore'
 import { liveFrame, useLiveSimStore, HISTORY_SECONDS_MAX } from '@stores/liveSimStore'
-import { buildTransientNetlist } from '../sim/netlist'
+import { buildTransientNetlist, usesPhasorAnalysis } from '../sim/netlist'
 import { TransientSimulator, suggestMaxStep } from '../sim/transient'
 import { stepThermal } from '../sim/thermal'
 import type { CircuitComponent } from '../sim/elements'
@@ -111,7 +111,7 @@ export function useLiveSimulation(): void {
       terminalNodes: built.terminalNodes,
       warnings: built.warnings,
       maxStep: suggestMaxStep(built.netlist),
-      ownsResult: !components.some((c) => c.type === 'ac_voltage_source'),
+      ownsResult: !usesPhasorAnalysis(components),
       components
     }
     // Immediate solve so readouts update without waiting for a frame

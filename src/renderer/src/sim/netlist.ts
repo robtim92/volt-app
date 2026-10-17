@@ -457,3 +457,15 @@ export function buildTransientNetlist(
   }
   return { netlist: { elements }, terminalNodes, warnings }
 }
+
+/**
+ * Single-frequency phasor (AC) analysis applies only to linear circuits with an
+ * AC source. Anything with diodes/LEDs (rectifiers, clippers) is nonlinear, so
+ * the live time-domain simulator owns those even when an AC source is present.
+ */
+export function usesPhasorAnalysis(components: CircuitComponent[]): boolean {
+  return (
+    components.some((c) => c.type === 'ac_voltage_source') &&
+    !components.some((c) => c.type === 'diode' || c.type === 'led' || c.type === 'transistor_npn')
+  )
+}

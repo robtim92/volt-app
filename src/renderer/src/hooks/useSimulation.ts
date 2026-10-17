@@ -11,7 +11,7 @@
  */
 import { useEffect, useRef } from 'react'
 import { useCircuitStore, type SimulationResult } from '@stores/circuitStore'
-import { buildNetlist, buildACNetlist } from '../sim/netlist'
+import { buildNetlist, buildACNetlist, usesPhasorAnalysis } from '../sim/netlist'
 import { solveDC } from '../sim/solver'
 import { solveAC } from '../sim/acSolver'
 import { abs, phaseDeg } from '../sim/complex'
@@ -80,7 +80,7 @@ export function useSimulation({ steadyDC = true }: UseSimulationOptions = {}): v
     const timer = setTimeout(() => {
       // ── AC analysis (an AC source is present) ──
       const acSources = components.filter((c) => c.type === 'ac_voltage_source')
-      if (acSources.length > 0) {
+      if (acSources.length > 0 && (steadyDC || usesPhasorAnalysis(components))) {
         const { netlist, terminalNodes, warnings } = buildACNetlist(components, wires)
         const freqs = acSources.map((s) => s.frequency ?? 60)
         const f = freqs[0]

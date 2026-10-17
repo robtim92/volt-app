@@ -85,9 +85,25 @@ export interface TransientEvent {
   volts: number
 }
 
+/**
+ * Per-element figures averaged over every step of one advance() call. The heat
+ * model uses these so AC heating doesn't depend on where in the cycle a frame
+ * happens to land.
+ */
+export interface StepStats {
+  /** mean |v·i| (W) */
+  power: Record<string, number>
+  /** RMS current (A) */
+  irms: Record<string, number>
+  /** peak |v| across the element (V) */
+  vpeak: Record<string, number>
+}
+
 export interface TransientSnapshot {
   solved: boolean
   time: number
+  /** averages over the last advance() window (absent for instantaneous solves) */
+  stats?: StepStats
   nodeVoltages: Record<string, number>
   /** element id → current nodes[0] → nodes[1] (SPICE sign convention for sources) */
   elementCurrents: Record<string, number>
@@ -213,6 +229,29 @@ export class TransientSimulator {
     if (duration <= 0) return this.lastSnapshot
     const n = Math.min(maxSteps, Math.max(1, Math.ceil(duration / maxStep)))
     const dt = duration / Math.ceil(duration / maxStep) // uniform steps
+    const acc = { p: {} as Record<string, number>, i2: {} as Record<string, number>, vmax: {} as Record<string, number>, t: 0 }
+    const accumulate = (h: number): void => {
+      const cur = this.currents(h, false)
+      for (const el of this.netlist.elements) {
+        const i = cur[el.id] ?? 0
+        const v = this.v(el.nodes[0]) - this.v(el.nodes[1])
+        acc.p[el.id] = (acc.p[el.id] ?? 0) + Math.abs(v * i) * h
+        acc.i2[el.id] = (acc.i2[el.id] ?? 0) + i * i * h
+        acc.vmax[el.id] = Math.max(acc.vmax[el.id] ?? 0, Math.abs(v))
+      }
+      acc.t += h
+    }
+    // After a topology change (switch flipped, part added) fast transients like
+    // inductive kickback happen on a far shorter scale than the normal step:
+    // resolve them with one tiny backward-Euler step first.
+    if (this.firstStep && this.opts.backwardEuler !== true) {
+      const micro = Math.min(dt / 1000, 1e-7)
+      if (!this.step(micro, true)) {
+        this.lastSnapshot = this.failSnapshot()
+        return this.lastSnapshot
+      }
+      this.commit(micro, true)
+    }
     for (let k = 0; k < n; k++) {
       const be = this.opts.backwardEuler === true || this.firstStep
       if (!this.step(dt, be)) {
@@ -221,8 +260,17 @@ export class TransientSimulator {
       }
       this.commit(dt, be)
       this.firstStep = false
+      accumulate(dt)
     }
     this.lastSnapshot = this.buildSnapshot(dt, false)
+    if (acc.t > 0) {
+      const stats: StepStats = { power: {}, irms: {}, vpeak: acc.vmax }
+      for (const id of Object.keys(acc.p)) {
+        stats.power[id] = acc.p[id] / acc.t
+        stats.irms[id] = Math.sqrt(acc.i2[id] / acc.t)
+      }
+      this.lastSnapshot.stats = stats
+    }
     return this.lastSnapshot
   }
 
@@ -400,9 +448,14 @@ export class TransientSimulator {
   }
 
   private buildSnapshot(dt: number, be: boolean): TransientSnapshot {
-    const st = this.state
     const nodeVoltages: Record<string, number> = { [GROUND]: 0 }
     for (const [name, i] of this.nodeIndex) nodeVoltages[name] = this.x[i]
+    return { solved: true, time: this.state.time, nodeVoltages, elementCurrents: this.currents(dt, be) }
+  }
+
+  /** Element currents for the current solution (be = instantaneous solve). */
+  private currents(dt: number, be: boolean): Record<string, number> {
+    const st = this.state
     const vd = (el: TransientElement): number => this.v(el.nodes[0]) - this.v(el.nodes[1])
     const elementCurrents: Record<string, number> = {}
     for (const el of this.netlist.elements) {
@@ -437,7 +490,7 @@ export class TransientSimulator {
     this.vsources.forEach((vs, k) => {
       elementCurrents[vs.id] = this.x[numNodes + k]
     })
-    return { solved: true, time: st.time, nodeVoltages, elementCurrents }
+    return elementCurrents
   }
 }
 
