@@ -32,6 +32,8 @@ import {
 } from '../../sim/elements'
 import { terminalKey } from '../../sim/netlist'
 import { wireCurrent, wireNetVoltage } from '../../sim/measure'
+import { liveFrame, useLiveSimStore } from '@stores/liveSimStore'
+import type { SimulationResult } from '@stores/circuitStore'
 
 interface CircuitCanvasProps {
   pendingType: ComponentType | null
@@ -94,7 +96,8 @@ function drawSymbol(
   ctx: CanvasRenderingContext2D,
   comp: CircuitComponent,
   stroke: string,
-  lit: boolean
+  lit: boolean,
+  brightness = 1
 ): void {
   const E = 2 * GRID // terminal extent
   ctx.strokeStyle = stroke
@@ -223,10 +226,10 @@ function drawSymbol(
       if (comp.type === 'led') {
         if (lit) {
           ctx.save()
-          ctx.globalAlpha = 0.35
+          ctx.globalAlpha = 0.15 + 0.45 * brightness
           ctx.fillStyle = '#ffd54a'
           ctx.beginPath()
-          ctx.arc(0, 0, 26, 0, Math.PI * 2)
+          ctx.arc(0, 0, 18 + 14 * brightness, 0, Math.PI * 2)
           ctx.fill()
           ctx.restore()
         }
@@ -625,8 +628,21 @@ export default function CircuitCanvas({
       const view = viewRef.current
 
       const dark = useUIStore.getState().darkMode
-      const { components, wires, simResult, selectedIds, selectedWireId } =
-        useCircuitStore.getState()
+      const {
+        components,
+        wires,
+        simResult: storedResult,
+        selectedIds,
+        selectedWireId
+      } = useCircuitStore.getState()
+      // Live results: read the per-frame snapshot for smooth animation
+      const liveSnap = liveFrame.snapshot
+      const simResult: SimulationResult | null =
+        storedResult?.live && liveSnap?.solved
+          ? { ...storedResult, nodeVoltages: liveSnap.nodeVoltages, elementCurrents: liveSnap.elementCurrents }
+          : storedResult
+      const effects = useLiveSimStore.getState().effects
+      const nowMs = performance.now()
       const selectedSet = new Set(selectedIds)
       const byId = new Map(components.map((c) => [c.id, c]))
 
@@ -756,10 +772,25 @@ export default function CircuitCanvas({
 
       // ── components ──
       for (const comp of components) {
-        const lit =
-          comp.type === 'led' &&
-          solved &&
-          (simResult!.elementCurrents[comp.id] ?? 0) > 1e-3
+        const ledCurrent =
+          comp.type === 'led' && solved && !comp.damaged
+            ? simResult!.elementCurrents[comp.id] ?? 0
+            : 0
+        const lit = ledCurrent > 1e-3
+        const heat = liveFrame.heat[comp.id] ?? 0
+
+        // heat glow (parts running near / over their rating)
+        if (!comp.damaged && heat > 0.5) {
+          const t = Math.min(1, (heat - 0.5) / 1.5)
+          const flicker = heat > 1.5 ? 0.85 + 0.15 * Math.sin(time / 60 + comp.x) : 1
+          const g = ctx.createRadialGradient(comp.x, comp.y, 4, comp.x, comp.y, 44)
+          g.addColorStop(0, `rgba(255,${Math.round(150 - 110 * t)},40,${(0.25 + 0.45 * t) * flicker})`)
+          g.addColorStop(1, 'rgba(255,60,20,0)')
+          ctx.fillStyle = g
+          ctx.beginPath()
+          ctx.arc(comp.x, comp.y, 44, 0, Math.PI * 2)
+          ctx.fill()
+        }
 
         const tripped =
           (comp.type === 'breaker' || comp.type === 'gfci') &&
@@ -770,8 +801,46 @@ export default function CircuitCanvas({
         ctx.save()
         ctx.translate(comp.x, comp.y)
         ctx.rotate((comp.rotation * Math.PI) / 180)
-        drawSymbol(ctx, comp, tripped ? '#ef4444' : inkNeutral, lit)
+        drawSymbol(
+          ctx,
+          comp,
+          comp.damaged ? (dark ? '#57534e' : '#78716c') : tripped ? '#ef4444' : inkNeutral,
+          lit,
+          Math.min(1, ledCurrent / 0.02)
+        )
         ctx.restore()
+
+        // burnt-out marker
+        if (comp.damaged) {
+          ctx.strokeStyle = '#ef4444'
+          ctx.lineWidth = 2.5
+          ctx.beginPath()
+          ctx.moveTo(comp.x - 9, comp.y - 9); ctx.lineTo(comp.x + 9, comp.y + 9)
+          ctx.moveTo(comp.x + 9, comp.y - 9); ctx.lineTo(comp.x - 9, comp.y + 9)
+          ctx.stroke()
+          ctx.font = 'bold 10px Inter, system-ui, sans-serif'
+          ctx.fillStyle = '#ef4444'
+          ctx.textAlign = 'center'
+          ctx.fillText(comp.type === 'ammeter' ? 'FUSE BLOWN' : 'BURNT', comp.x, comp.y + 48)
+        }
+
+        // failure / spark flash
+        for (const fx of effects) {
+          if (fx.componentId !== comp.id) continue
+          const age = (nowMs - fx.at) / 700
+          if (age < 0 || age > 1) continue
+          ctx.strokeStyle = fx.kind === 'trip' || fx.kind === 'arc' ? `rgba(120,200,255,${1 - age})` : `rgba(255,170,40,${1 - age})`
+          ctx.lineWidth = 3
+          for (let k = 0; k < 8; k++) {
+            const a = (k / 8) * Math.PI * 2 + comp.x
+            const r0 = 10 + 30 * age
+            const r1 = r0 + 12
+            ctx.beginPath()
+            ctx.moveTo(comp.x + Math.cos(a) * r0, comp.y + Math.sin(a) * r0)
+            ctx.lineTo(comp.x + Math.cos(a) * r1, comp.y + Math.sin(a) * r1)
+            ctx.stroke()
+          }
+        }
 
         if (selectedSet.has(comp.id)) {
           ctx.strokeStyle = accent

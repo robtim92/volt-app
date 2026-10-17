@@ -3,6 +3,7 @@ import { useCircuitStore } from '@stores/circuitStore'
 import { useLessonStore } from '@stores/lessonStore'
 import { useUIStore } from '@stores/uiStore'
 import { useSimulation } from '../../hooks/useSimulation'
+import { useLiveSimulation } from '../../hooks/useLiveSimulation'
 import {
   deleteCircuit,
   exportCircuitJSON,
@@ -17,9 +18,14 @@ import Palette from './Palette'
 import CircuitCanvas from './CircuitCanvas'
 import Inspector from './Inspector'
 import Oscilloscope from './Oscilloscope'
+import SimControls from './SimControls'
+import FailureToast from './FailureToast'
 
 export default function SandboxPanel(): JSX.Element {
-  useSimulation()
+  // Steady-state analysis handles AC (phasor) circuits; the live time-domain
+  // engine owns the result for everything else.
+  useSimulation({ steadyDC: false })
+  useLiveSimulation()
 
   const [pendingType, setPendingType] = useState<ComponentType | null>(null)
   const [circuitName, setCircuitName] = useState('')
@@ -151,7 +157,7 @@ export default function SandboxPanel(): JSX.Element {
   // ── status line ──
   const acHz =
     simResult?.ac && simResult.omega ? Math.round(simResult.omega / (2 * Math.PI)) : null
-  const solvedPrefix = acHz !== null ? `AC @ ${acHz} Hz` : 'Solved'
+  const solvedPrefix = acHz !== null ? `AC @ ${acHz} Hz` : simResult?.live ? 'Live' : 'Solved'
   let status: { text: string; tone: 'ok' | 'warn' | 'error' | 'idle' }
   if (components.length === 0) {
     status = { text: 'Place components to start building', tone: 'idle' }
@@ -327,7 +333,7 @@ export default function SandboxPanel(): JSX.Element {
                   .slice(0, activeCircuitQuiz.attempts)
                   .map((hint, i) => (
                     <p key={i} className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                      \U0001f4a1 {hint}
+                      💡 {hint}
                     </p>
                   ))}
             </div>
@@ -353,6 +359,7 @@ export default function SandboxPanel(): JSX.Element {
           allowedTypes={activeCircuitQuiz?.card.allowedComponents}
         />
         <div className="flex-1 min-w-0 relative">
+          <FailureToast />
           <CircuitCanvas
             pendingType={pendingType}
             onPlaced={onPlaced}
@@ -366,9 +373,10 @@ export default function SandboxPanel(): JSX.Element {
 
       {/* Status bar */}
       <div className="h-7 shrink-0 flex items-center px-3 border-t border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-brand-navy/40">
-        <span className={`text-xs ${toneClass}`} data-testid="sim-status">
+        <span className={`flex-1 truncate text-xs ${toneClass}`} data-testid="sim-status">
           {notice ?? status.text}
         </span>
+        <SimControls />
       </div>
     </div>
   )

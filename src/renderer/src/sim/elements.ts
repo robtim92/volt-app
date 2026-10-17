@@ -30,6 +30,8 @@ export interface CircuitComponent {
   closed?: boolean  // switches only; default false (open)
   frequency?: number // ac_voltage_source only: frequency in Hz
   phase?: number     // ac_voltage_source only: phase in degrees (default 0)
+  rating?: number    // thermal/safety rating override: resistor W, LED/diode A, capacitor V
+  damaged?: boolean  // burnt out by overheating (acts as an open circuit until repaired)
 }
 
 export interface Wire {

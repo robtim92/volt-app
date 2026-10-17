@@ -32,9 +32,9 @@
 export const GROUND = 'gnd'
 
 /** Thermal voltage kT/q at ~27 °C */
-const VT = 0.02585
+export const VT = 0.02585
 /** Minimum junction conductance — keeps reverse-biased circuits solvable */
-const GMIN = 1e-12
+export const GMIN = 1e-12
 const MAX_NR_ITERATIONS = 200
 /** Convergence: max junction voltage change per iteration */
 const NR_TOLERANCE = 1e-9
@@ -173,12 +173,12 @@ export function solveLinearSystem(A: number[][], b: number[]): number[] | null {
 
 // ── Diode model ──────────────────────────────────────────────────────────────
 
-function diodeCurrent(vd: number, p: DiodeParams): number {
+export function diodeCurrent(vd: number, p: DiodeParams): number {
   const nvt = p.emissionCoefficient * VT
   return p.saturationCurrent * (Math.exp(vd / nvt) - 1) + GMIN * vd
 }
 
-function diodeConductance(vd: number, p: DiodeParams): number {
+export function diodeConductance(vd: number, p: DiodeParams): number {
   const nvt = p.emissionCoefficient * VT
   return (p.saturationCurrent / nvt) * Math.exp(vd / nvt) + GMIN
 }
@@ -187,7 +187,7 @@ function diodeConductance(vd: number, p: DiodeParams): number {
  * SPICE-style junction voltage limiting (pnjlim). Prevents Newton-Raphson from
  * overshooting into exponential overflow while still allowing convergence.
  */
-function limitJunctionVoltage(vNew: number, vOld: number, p: DiodeParams): number {
+export function limitJunctionVoltage(vNew: number, vOld: number, p: DiodeParams): number {
   const nvt = p.emissionCoefficient * VT
   const vCrit = nvt * Math.log(nvt / (Math.SQRT2 * p.saturationCurrent))
 

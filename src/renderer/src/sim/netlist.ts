@@ -18,12 +18,16 @@
 
 import { GROUND, LED_PARAMS, type Netlist, type NetlistElement } from './solver'
 import type { ACNetlist, ACNetlistElement } from './acSolver'
+import type { TransientElement, TransientNetlist } from './transient'
 import { ELEMENTS, type CircuitComponent, type Wire } from './elements'
 
 /** Resistance used for closed switches, ammeters, and DC-shorted inductors */
 const SHORT_RESISTANCE = 1e-3
 /** Voltmeter input impedance (10 MΩ, like a real multimeter) */
 const VOLTMETER_RESISTANCE = 1e7
+/** Internal series resistance of an LED / rectifier diode (time-domain model) */
+const LED_SERIES_RESISTANCE = 2
+const DIODE_SERIES_RESISTANCE = 0.1
 
 export interface NetlistBuildResult {
   netlist: Netlist
@@ -73,7 +77,11 @@ interface NodeAssignment {
 }
 
 /** Union-find over terminals → stable node names. Shared by both builders. */
-function computeTerminalNodes(components: CircuitComponent[], wires: Wire[]): NodeAssignment {
+function computeTerminalNodes(
+  components: CircuitComponent[],
+  wires: Wire[],
+  autoGround = false
+): NodeAssignment {
   const warnings: string[] = []
   const byId = new Map(components.map((c) => [c.id, c]))
   const uf = new UnionFind()
@@ -114,6 +122,16 @@ function computeTerminalNodes(components: CircuitComponent[], wires: Wire[]): No
       groupNames.set(uf.find(terminalKey(c.id, 0)), GROUND)
     }
   }
+  if (autoGround && groupNames.size === 0) {
+    // No ground placed: reference the negative terminal of the first source,
+    // like a battery's (−) post. Beginners don't need to know about ground yet.
+    const src = components.find(
+      (c) =>
+        c.type === 'voltage_source' || c.type === 'ac_voltage_source' || c.type === 'current_source'
+    )
+    if (src) groupNames.set(uf.find(terminalKey(src.id, 1)), GROUND)
+  }
+
   let counter = 0
   const nodeNameOf = (terminal: string): string => {
     const root = uf.find(terminal)
@@ -346,5 +364,96 @@ export function buildACNetlist(
     }
   }
 
+  return { netlist: { elements }, terminalNodes, warnings }
+}
+
+// ── Transient (time-domain) builder ─────────────────────────────────────────────
+
+export interface TransientNetlistBuildResult {
+  netlist: TransientNetlist
+  terminalNodes: Record<string, string>
+  warnings: string[]
+}
+
+/**
+ * Build the netlist for time-domain simulation. Capacitors and inductors keep
+ * their real values; AC sources become sine sources; damaged (burnt-out)
+ * components are open circuits. If no ground is placed, the negative terminal
+ * of the first source becomes the reference automatically.
+ */
+export function buildTransientNetlist(
+  components: CircuitComponent[],
+  wires: Wire[]
+): TransientNetlistBuildResult {
+  const { terminalNodes, wiredTerminals, warnings } = computeTerminalNodes(components, wires, true)
+
+  const elements: TransientElement[] = []
+  for (const c of components) {
+    if (c.type === 'ground' || c.type === 'wire_node') continue
+    if (c.damaged) continue // burnt out → open circuit
+    if (c.type === 'transistor_npn') {
+      warnings.push(`${labelOf(c)}: transistors are not supported yet`)
+      continue
+    }
+    if (c.type === 'transformer') {
+      warnings.push(`${labelOf(c)}: transformers are shown in AC analysis only`)
+      continue
+    }
+
+    const nodes = twoTerminalNodes(c, terminalNodes, wiredTerminals, warnings)
+    if (!nodes) continue
+    const value = c.value ?? ELEMENTS[c.type].defaultValue ?? 0
+
+    switch (c.type) {
+      case 'resistor':
+      case 'capacitor':
+      case 'inductor':
+      case 'voltage_source':
+      case 'current_source':
+        elements.push({ id: c.id, type: c.type, value, nodes })
+        break
+      case 'ac_voltage_source':
+        elements.push({
+          id: c.id,
+          type: 'sine_source',
+          value,
+          frequency: c.frequency ?? 60,
+          phaseDeg: c.phase ?? 0,
+          nodes
+        })
+        break
+      case 'diode':
+      case 'led': {
+        // Real junctions have bulk (series) resistance — without it an ideal
+        // source straight across an LED would push effectively infinite current.
+        const junction = `${c.id}#j`
+        elements.push({
+          id: c.id,
+          type: 'diode',
+          value: 0,
+          nodes: [nodes[0], junction],
+          params: c.type === 'led' ? LED_PARAMS : undefined
+        })
+        elements.push({
+          id: `${c.id}#rs`,
+          type: 'resistor',
+          value: c.type === 'led' ? LED_SERIES_RESISTANCE : DIODE_SERIES_RESISTANCE,
+          nodes: [junction, nodes[1]]
+        })
+        break
+      }
+      case 'switch':
+      case 'breaker':
+      case 'gfci':
+        if (c.closed) elements.push({ id: c.id, type: 'resistor', value: SHORT_RESISTANCE, nodes })
+        break
+      case 'voltmeter':
+        elements.push({ id: c.id, type: 'resistor', value: VOLTMETER_RESISTANCE, nodes })
+        break
+      case 'ammeter':
+        elements.push({ id: c.id, type: 'resistor', value: SHORT_RESISTANCE, nodes })
+        break
+    }
+  }
   return { netlist: { elements }, terminalNodes, warnings }
 }

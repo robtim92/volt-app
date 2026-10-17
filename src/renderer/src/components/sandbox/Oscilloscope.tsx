@@ -20,6 +20,7 @@ import { useUIStore } from '@stores/uiStore'
 import { ELEMENTS } from '../../sim/elements'
 import { terminalKey } from '../../sim/netlist'
 import { sampleWave, periodSeconds } from '../../sim/waveform'
+import LiveScope, { type LiveProbe } from './LiveScope'
 
 const TRACE_COLORS = ['#E8B500', '#3b82f6', '#22c55e', '#ef4444', '#a855f7']
 const MAX_DEFAULT_TRACES = 5
@@ -82,6 +83,33 @@ export default function Oscilloscope(): JSX.Element {
         seen.add(node)
         traces.push(nodeTrace(node, node, TRACE_COLORS[traces.length % TRACE_COLORS.length]))
         if (traces.length >= MAX_DEFAULT_TRACES) break
+      }
+    }
+  }
+
+  // ── Live (time-domain) probes for non-AC circuits ──
+  const liveMode = !ac && simResult?.live === true && simResult.solved
+  const probes: LiveProbe[] = []
+  if (liveMode && simResult) {
+    const add = (node: string | undefined, label: string): void => {
+      if (!node || node === 'gnd' || node.includes('#') || probes.some((p) => p.node === node)) return
+      probes.push({ node, label, color: TRACE_COLORS[probes.length % TRACE_COLORS.length] })
+    }
+    const wire = selectedWireId ? wires.find((w) => w.id === selectedWireId) : undefined
+    const component = selectedComponentId
+      ? components.find((c) => c.id === selectedComponentId)
+      : undefined
+    if (wire) {
+      add(simResult.terminalNodes[terminalKey(wire.fromComponentId, wire.fromTerminal)], 'Net')
+    } else if (component) {
+      ELEMENTS[component.type].terminals.forEach((t, i) =>
+        add(simResult.terminalNodes[terminalKey(component.id, i)], `${component.label ?? component.id} ${t.name ?? `pin ${i + 1}`}`)
+      )
+    }
+    if (probes.length === 0) {
+      for (const node of Object.keys(simResult.nodeVoltages)) {
+        add(node, node)
+        if (probes.length >= MAX_DEFAULT_TRACES) break
       }
     }
   }
@@ -179,6 +207,7 @@ export default function Oscilloscope(): JSX.Element {
       <div className="flex items-center justify-between px-3 py-1.5">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">Oscilloscope</span>
+          {liveMode && <span className="text-xs text-emerald-500">live · voltage vs. time</span>}
           {ac && (
             <span className="text-xs text-gray-500 dark:text-gray-400">
               {freqHz >= 1000 ? `${(freqHz / 1000).toFixed(2)} kHz` : `${Math.round(freqHz)} Hz`} ·{' '}
@@ -210,9 +239,12 @@ export default function Oscilloscope(): JSX.Element {
             ))}
           </div>
         </div>
+      ) : liveMode ? (
+        <LiveScope key={probes.map((p) => p.node).join('|')} probes={probes} />
       ) : (
         <p className="px-3 pb-3 text-xs text-gray-400 dark:text-gray-500">
-          Add an AC source (and probe a wire or component) to see its waveform here.
+          Build a circuit to watch its voltages change over time — or add an AC source (and probe a
+          wire or component) to see its phasor waveform here.
         </p>
       )}
     </div>

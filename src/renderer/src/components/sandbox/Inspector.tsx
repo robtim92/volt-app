@@ -3,6 +3,7 @@ import { useCircuitStore } from '@stores/circuitStore'
 import { ELEMENTS, formatValue, parseValue } from '../../sim/elements'
 import { terminalKey } from '../../sim/netlist'
 import { wireCurrent, wireNetVoltage } from '../../sim/measure'
+import PartHealth from './PartHealth'
 
 function Shell({ children }: { children: React.ReactNode }): JSX.Element {
   return (
@@ -78,6 +79,7 @@ export default function Inspector(): JSX.Element {
 
         <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">
           Measurements {ac && <span className="text-brand-yellow">· AC (RMS)</span>}
+        {simResult?.live && <span className="text-emerald-500 normal-case tracking-normal"> · live</span>}
         </p>
         {simResult?.solved ? (
           <div className="text-sm space-y-1">
@@ -286,6 +288,8 @@ export default function Inspector(): JSX.Element {
           </p>
         )}
 
+      <PartHealth component={component} />
+
       <div className="flex gap-2 mb-4">
         <button
           onClick={() => {
@@ -306,6 +310,7 @@ export default function Inspector(): JSX.Element {
 
       <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">
         Measurements {ac && <span className="text-brand-yellow">· AC (RMS)</span>}
+        {simResult?.live && <span className="text-emerald-500 normal-case tracking-normal"> · live</span>}
       </p>
       {simResult?.solved ? (
         <div className="text-sm space-y-1">

@@ -38,7 +38,15 @@ function tripWarnings(
   return out
 }
 
-export function useSimulation(): void {
+export interface UseSimulationOptions {
+  /**
+   * Publish steady-state DC results. Off when the live (time-domain) simulator
+   * owns the result for non-AC circuits (see useLiveSimulation).
+   */
+  steadyDC?: boolean
+}
+
+export function useSimulation({ steadyDC = true }: UseSimulationOptions = {}): void {
   const components = useCircuitStore((s) => s.components)
   const wires = useCircuitStore((s) => s.wires)
   const setSimResult = useCircuitStore((s) => s.setSimResult)
@@ -114,6 +122,7 @@ export function useSimulation(): void {
       }
 
       // ── DC analysis ──
+      if (!steadyDC) return
       const { netlist, terminalNodes, warnings } = buildNetlist(components, wires)
 
       const publish = (solved: ReturnType<typeof solveDC>): void => {
@@ -145,5 +154,5 @@ export function useSimulation(): void {
     }, DEBOUNCE_MS)
 
     return () => clearTimeout(timer)
-  }, [components, wires, setSimResult])
+  }, [components, wires, setSimResult, steadyDC])
 }

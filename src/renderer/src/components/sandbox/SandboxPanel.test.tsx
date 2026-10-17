@@ -44,7 +44,7 @@ describe('SandboxPanel', () => {
     useCircuitStore.getState().loadCircuitData(components, wires)
 
     await waitFor(
-      () => expect(screen.getByTestId('sim-status')).toHaveTextContent(/Solved/),
+      () => expect(screen.getByTestId('sim-status')).toHaveTextContent(/Live/),
       { timeout: 2000 }
     )
 
@@ -53,9 +53,8 @@ describe('SandboxPanel', () => {
     expect(result?.elementCurrents['r1']).toBeCloseTo(0.01, 6)
   })
 
-  it('reports solver errors for incomplete circuits', async () => {
+  it('auto-references ground at the source when no ground is placed', async () => {
     render(<SandboxPanel />)
-    // Voltage source with no ground anywhere
     useCircuitStore.getState().loadCircuitData(
       [
         { id: 'v1', type: 'voltage_source', x: 0, y: 0, rotation: 0, value: 5, label: 'V1' },
@@ -66,7 +65,24 @@ describe('SandboxPanel', () => {
         { id: 'w2', fromComponentId: 'r1', fromTerminal: 1, toComponentId: 'v1', toTerminal: 1 }
       ]
     )
+    await waitFor(
+      () => expect(useCircuitStore.getState().simResult?.elementCurrents['r1']).toBeCloseTo(0.05, 6),
+      { timeout: 2000 }
+    )
+  })
 
+  it('reports solver errors for circuits with no source or ground', async () => {
+    render(<SandboxPanel />)
+    useCircuitStore.getState().loadCircuitData(
+      [
+        { id: 'r1', type: 'resistor', x: 0, y: 0, rotation: 0, value: 100, label: 'R1' },
+        { id: 'r2', type: 'resistor', x: 100, y: 0, rotation: 0, value: 100, label: 'R2' }
+      ],
+      [
+        { id: 'w1', fromComponentId: 'r1', fromTerminal: 0, toComponentId: 'r2', toTerminal: 0 },
+        { id: 'w2', fromComponentId: 'r2', fromTerminal: 1, toComponentId: 'r1', toTerminal: 1 }
+      ]
+    )
     await waitFor(
       () => expect(screen.getByTestId('sim-status')).toHaveTextContent(/ground/i),
       { timeout: 2000 }
@@ -80,7 +96,7 @@ describe('SandboxPanel', () => {
     // direct module check is covered in circuitFiles.test.ts; here we check the
     // store integration didn't break rendering after load
     await waitFor(
-      () => expect(screen.getByTestId('sim-status')).toHaveTextContent(/Solved/),
+      () => expect(screen.getByTestId('sim-status')).toHaveTextContent(/Live/),
       { timeout: 2000 }
     )
   })

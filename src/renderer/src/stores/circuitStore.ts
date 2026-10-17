@@ -25,6 +25,12 @@ export interface SimulationResult {
   nodeVoltagePhase?: Record<string, number>
   /** component id → current phase in degrees (AC only). In AC mode elementCurrents holds peak magnitudes. */
   elementCurrentPhase?: Record<string, number>
+
+  // ── Live (time-domain) simulation ──
+  /** True when this result is an instantaneous value from the live simulator. */
+  live?: boolean
+  /** Simulated time (s) of a live result. */
+  time?: number
 }
 
 /** Undo/redo snapshot — only the circuit graph, not transient UI/sim state. */

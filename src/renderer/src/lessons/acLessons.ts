@@ -86,7 +86,8 @@ function transformerPreset(): CircuitPreset {
 function breakerPreset(): CircuitPreset {
   const v = c('voltage_source', 160, 200, { value: 12, label: 'V1' })
   const cb = c('breaker', 360, 200, { value: 15, closed: true, label: 'CB1' })
-  const r = c('resistor', 560, 200, { value: 100, label: 'R1' })
+  // 1.44 W load — a 2 W power resistor so it doesn't overheat
+  const r = c('resistor', 560, 200, { value: 100, rating: 2, label: 'R1' })
   const g = c('ground', 160, 360, { label: 'GND1' })
   return {
     components: [v, cb, r, g],
@@ -294,7 +295,7 @@ The neutral is bonded to ground at the panel, giving the system a safe reference
       {
         type: 'concept',
         title: 'Breakers and GFCIs',
-        body: `A circuit breaker trips when current exceeds its rating (say 15 A or 20 A), protecting the wiring from overheating. In Volt, a breaker conducts normally and flags a trip when the current through it exceeds its rating.
+        body: `A circuit breaker trips when current exceeds its rating (say 15 A or 20 A), protecting the wiring from overheating. In Volt, a breaker conducts normally and trips open when the current through it stays above its rating — reset it from the Inspector once the overload is gone.
 
 A GFCI (ground-fault circuit interrupter) watches for current leaking to ground — as little as ~5 mA — and cuts power fast to protect people, which is why they're required near water. Volt models a simplified leakage-trip version of a GFCI as a teaching aid.`,
         circuit: breakerPreset(),
