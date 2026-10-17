@@ -44,7 +44,7 @@ export default function SimControls(): JSX.Element {
       <button onClick={requestReset} className={btn} title="Reset: time to zero, discharge, cool down and repair parts" aria-label="Reset simulation">
         ⟲
       </button>
-      <span className="text-xs font-mono text-gray-500 dark:text-gray-400 w-20 text-right" data-testid="sim-clock">
+      <span className="text-xs font-mono text-gray-500 dark:text-gray-400 w-24 text-right whitespace-nowrap" data-testid="sim-clock">
         t = {formatTime(simTime)}
       </span>
       {running && speedRatio < 0.9 && (

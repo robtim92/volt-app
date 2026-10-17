@@ -274,7 +274,8 @@ export function formatValue(value: number, unit = ''): string {
   }
   // up to 3 significant-ish digits, trim trailing zeros
   const text = parseFloat(scaled.toPrecision(3)).toString()
-  return `${text}${suffix}${unit ? ' ' + unit : ''}`
+  // "4.7 kΩ", "10 mA", "5 V"; bare numbers keep the suffix attached ("4.7k")
+  return unit ? `${text} ${suffix}${unit}` : `${text}${suffix}`
 }
 
 const SUFFIX_MULTIPLIERS: Record<string, number> = {

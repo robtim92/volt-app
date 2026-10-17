@@ -727,7 +727,7 @@ export default function CircuitCanvas({
 
         if (solved) {
           const i = wireCurrent(wire, simResult!)
-          if (i !== null && Math.abs(i) > maxI * 1e-4 && Math.abs(i) > 1e-12) {
+          if (i !== null && Math.abs(i) > maxI * 1e-4 && Math.abs(i) > 1e-6) {
             const speed = 14 + 40 * Math.min(1, Math.abs(i) / maxI)
             const offset = ((time / 1000) * speed) % 12
             ctx.strokeStyle = dark ? 'rgba(232,181,0,0.9)' : 'rgba(202,138,4,0.9)'

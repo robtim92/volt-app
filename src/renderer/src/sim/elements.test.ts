@@ -13,16 +13,16 @@ import {
 
 describe('formatValue', () => {
   it('uses engineering suffixes', () => {
-    expect(formatValue(4700, 'Ω')).toBe('4.7k Ω')
+    expect(formatValue(4700, 'Ω')).toBe('4.7 kΩ')
     expect(formatValue(1000000)).toBe('1M')
-    expect(formatValue(0.01, 'A')).toBe('10m A')
-    expect(formatValue(0.0000047, 'F')).toBe('4.7µ F')
+    expect(formatValue(0.01, 'A')).toBe('10 mA')
+    expect(formatValue(0.0000047, 'F')).toBe('4.7 µF')
     expect(formatValue(5, 'V')).toBe('5 V')
     expect(formatValue(0, 'V')).toBe('0 V')
   })
 
   it('handles negatives', () => {
-    expect(formatValue(-0.005, 'A')).toBe('-5m A')
+    expect(formatValue(-0.005, 'A')).toBe('-5 mA')
   })
 })
 

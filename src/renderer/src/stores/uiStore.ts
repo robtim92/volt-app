@@ -4,6 +4,7 @@ import type { CircuitQuizCard } from '../lessons/types'
 
 type Track = 'dc' | 'ac' | 'digital'
 type Panel = 'lessons' | 'sandbox' | 'dashboard' | 'settings'
+export type BenchView = '2d' | 'split' | '3d'
 
 export interface ActiveCircuitQuiz {
   /** Lesson id + card index — used to record the result. */
@@ -30,6 +31,8 @@ interface UIState {
   scopeOpen: boolean
   /** Set when the learner launches a circuit quiz from the lesson player. */
   activeCircuitQuiz: ActiveCircuitQuiz | null
+  /** Sandbox view: schematic, 3D bench, or both side by side (persisted). */
+  benchView: BenchView
 
   toggleDarkMode: () => void
   setActiveTrack: (track: Track) => void
@@ -39,6 +42,7 @@ interface UIState {
   toggleAIPanel: () => void
   setScopeOpen: (open: boolean) => void
   toggleScope: () => void
+  setBenchView: (view: BenchView) => void
   completeOnboarding: () => void
   startCircuitQuiz: (lessonId: string, cardIndex: number, card: CircuitQuizCard) => void
   setCircuitQuizResult: (passed: boolean, failures: string[]) => void
@@ -57,6 +61,7 @@ export const useUIStore = create<UIState>()(
       aiPanelOpen: false,
       scopeOpen: false,
       activeCircuitQuiz: null,
+      benchView: 'split',
 
       // Actions
       toggleDarkMode: () => set((s) => ({ darkMode: !s.darkMode })),
@@ -67,6 +72,7 @@ export const useUIStore = create<UIState>()(
       toggleAIPanel: () => set((s) => ({ aiPanelOpen: !s.aiPanelOpen })),
       setScopeOpen: (open) => set({ scopeOpen: open }),
       toggleScope: () => set((s) => ({ scopeOpen: !s.scopeOpen })),
+      setBenchView: (benchView) => set({ benchView }),
       completeOnboarding: () => set({ hasOnboarded: true }),
       startCircuitQuiz: (lessonId, cardIndex, card) =>
         set({
@@ -86,7 +92,8 @@ export const useUIStore = create<UIState>()(
       partialize: (s) => ({         // only persist user preferences, not transient UI state
         darkMode: s.darkMode,
         activeTrack: s.activeTrack,
-        hasOnboarded: s.hasOnboarded
+        hasOnboarded: s.hasOnboarded,
+        benchView: s.benchView
       })
     }
   )

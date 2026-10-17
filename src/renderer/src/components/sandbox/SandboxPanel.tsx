@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { useCircuitStore } from '@stores/circuitStore'
 import { useLessonStore } from '@stores/lessonStore'
 import { useUIStore } from '@stores/uiStore'
@@ -20,6 +20,9 @@ import Inspector from './Inspector'
 import Oscilloscope from './Oscilloscope'
 import SimControls from './SimControls'
 import FailureToast from './FailureToast'
+import ViewToggle from './ViewToggle'
+
+const Bench3D = lazy(() => import('../bench/Bench3D'))
 
 export default function SandboxPanel(): JSX.Element {
   // Steady-state analysis handles AC (phasor) circuits; the live time-domain
@@ -45,6 +48,7 @@ export default function SandboxPanel(): JSX.Element {
   const canRedo = useCircuitStore((s) => s.future.length > 0)
   const scopeOpen = useUIStore((s) => s.scopeOpen)
   const toggleScope = useUIStore((s) => s.toggleScope)
+  const benchView = useUIStore((s) => s.benchView)
 
   const activeCircuitQuiz = useUIStore((s) => s.activeCircuitQuiz)
   const setCircuitQuizResult = useUIStore((s) => s.setCircuitQuizResult)
@@ -221,6 +225,7 @@ export default function SandboxPanel(): JSX.Element {
           Delete
         </button>
         <div className="flex-1" />
+        <ViewToggle />
         <button
           onClick={handleExportPNG}
           disabled={components.length === 0}
@@ -358,13 +363,30 @@ export default function SandboxPanel(): JSX.Element {
           onPick={setPendingType}
           allowedTypes={activeCircuitQuiz?.card.allowedComponents}
         />
-        <div className="flex-1 min-w-0 relative">
+        <div className="flex-1 min-w-0 relative flex">
           <FailureToast />
-          <CircuitCanvas
-            pendingType={pendingType}
-            onPlaced={onPlaced}
-            canvasElRef={canvasElRef}
-          />
+          {benchView !== '3d' && (
+            <div className={`relative min-w-0 ${benchView === 'split' ? 'w-1/2 border-r border-gray-200 dark:border-white/10' : 'flex-1'}`}>
+              <CircuitCanvas
+                pendingType={pendingType}
+                onPlaced={onPlaced}
+                canvasElRef={canvasElRef}
+              />
+            </div>
+          )}
+          {benchView !== '2d' && (
+            <div className={`relative min-w-0 ${benchView === 'split' ? 'w-1/2' : 'flex-1'}`}>
+              <Suspense
+                fallback={
+                  <div className="h-full flex items-center justify-center text-sm text-gray-400">
+                    Loading 3D bench…
+                  </div>
+                }
+              >
+                <Bench3D />
+              </Suspense>
+            </div>
+          )}
         </div>
         <Inspector />
       </div>

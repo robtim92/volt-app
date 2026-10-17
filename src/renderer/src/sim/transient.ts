@@ -479,7 +479,11 @@ function carryState(netlist: TransientNetlist, prev?: TransientState): Transient
  */
 export function suggestMaxStep(netlist: TransientNetlist): number {
   let dt = 1e-3
-  const rs = netlist.elements.filter((e) => e.type === 'resistor').map((e) => e.value)
+  // Ignore near-zero "wire" resistances (closed switches, ammeters, junction
+  // bulk resistance) — they don't set a visible time scale.
+  const rs = netlist.elements
+    .filter((e) => e.type === 'resistor' && e.value >= 1 && !e.id.includes('#'))
+    .map((e) => e.value)
   const rMin = rs.length ? Math.min(...rs) : 1
   const rMax = rs.length ? Math.max(...rs) : 1
   for (const el of netlist.elements) {
