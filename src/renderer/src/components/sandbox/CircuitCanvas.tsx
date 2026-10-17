@@ -33,6 +33,9 @@ import {
 import { terminalKey } from '../../sim/netlist'
 import { wireCurrent, wireNetVoltage } from '../../sim/measure'
 import { liveFrame, useLiveSimStore } from '@stores/liveSimStore'
+import { DEFAULT_GAUGE, diameterMm } from '../../sim/wire'
+import { batteryParams } from '../../sim/netlist'
+import { cellOcv } from '../../sim/battery'
 import type { SimulationResult } from '@stores/circuitStore'
 
 interface CircuitCanvasProps {
@@ -145,6 +148,33 @@ function drawSymbol(
       ctx.moveTo(6, -7);   ctx.lineTo(6, 7)     // short plate = −
       ctx.moveTo(-20, -14); ctx.lineTo(-12, -14)
       ctx.moveTo(-16, -18); ctx.lineTo(-16, -10)
+      ctx.stroke()
+      break
+    }
+    case 'battery': {
+      // two cells: long plate (+) / short plate (−) twice, with a + mark
+      ctx.moveTo(-E, 0); ctx.lineTo(-14, 0)
+      ctx.moveTo(14, 0); ctx.lineTo(E, 0)
+      ctx.moveTo(-14, -14); ctx.lineTo(-14, 14)
+      ctx.moveTo(-6, -7); ctx.lineTo(-6, 7)
+      ctx.moveTo(6, -14); ctx.lineTo(6, 14)
+      ctx.moveTo(14, -7); ctx.lineTo(14, 7)
+      ctx.moveTo(-6, 0); ctx.lineTo(6, 0)
+      ctx.moveTo(-28, -14); ctx.lineTo(-20, -14)
+      ctx.moveTo(-24, -18); ctx.lineTo(-24, -10)
+      ctx.stroke()
+      break
+    }
+    case 'bench_supply': {
+      ctx.moveTo(-E, 0); ctx.lineTo(-22, 0)
+      ctx.moveTo(22, 0); ctx.lineTo(E, 0)
+      ctx.rect(-22, -16, 44, 32)
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.moveTo(-12, -4); ctx.lineTo(12, -4)            // DC symbol
+      for (let k = -12; k <= 12; k += 6) { ctx.moveTo(k, 4); ctx.lineTo(k + 3, 4) }
+      ctx.moveTo(-17, -10); ctx.lineTo(-13, -10)          // +
+      ctx.moveTo(-15, -12); ctx.lineTo(-15, -8)
       ctx.stroke()
       break
     }
@@ -538,7 +568,9 @@ export default function CircuitCanvas({
         label: nextLabel(type, store.components),
         closed:
           type === 'switch' ? false : type === 'breaker' || type === 'gfci' ? true : undefined,
-        frequency: type === 'ac_voltage_source' ? 60 : undefined
+        frequency: type === 'ac_voltage_source' ? 60 : undefined,
+        chemistry: type === 'battery' ? 'alkaline_9v' : undefined,
+        currentLimit: type === 'bench_supply' ? 1 : undefined
       }
       store.addComponent(comp)
       store.selectComponent(comp.id)
@@ -867,8 +899,52 @@ export default function CircuitCanvas({
         }
 
         const v = nodeVoltageAt(wire.fromComponentId, wire.fromTerminal)
+        // thicker gauges draw thicker (22 AWG ≈ 2.5 px)
+        const thick = Math.max(1.5, Math.min(6, 2.5 * Math.sqrt(diameterMm(wire.gauge ?? DEFAULT_GAUGE) / 0.644)))
+        const wheat = liveFrame.heat[wire.id] ?? 0
+        for (const fx of effects) {
+          if (fx.componentId !== wire.id) continue
+          const age = (nowMs - fx.at) / 700
+          if (age < 0 || age > 1) continue
+          const mx = (a.x + b.x) / 2
+          const my = (a.y + b.y) / 2
+          ctx.strokeStyle = `rgba(255,170,40,${1 - age})`
+          ctx.lineWidth = 3
+          for (let k = 0; k < 8; k++) {
+            const ang = (k / 8) * Math.PI * 2
+            const r0 = 6 + 26 * age
+            ctx.beginPath()
+            ctx.moveTo(mx + Math.cos(ang) * r0, my + Math.sin(ang) * r0)
+            ctx.lineTo(mx + Math.cos(ang) * (r0 + 10), my + Math.sin(ang) * (r0 + 10))
+            ctx.stroke()
+          }
+        }
+        if (wire.damaged) {
+          ctx.strokeStyle = '#ef4444'
+          ctx.lineWidth = 2
+          ctx.setLineDash([4, 5])
+          ctx.beginPath()
+          ctx.moveTo(a.x, a.y)
+          ctx.lineTo(b.x, b.y)
+          ctx.stroke()
+          ctx.setLineDash([])
+          ctx.font = 'bold 10px Inter, system-ui, sans-serif'
+          ctx.fillStyle = '#ef4444'
+          ctx.textAlign = 'center'
+          ctx.fillText('MELTED', (a.x + b.x) / 2, (a.y + b.y) / 2 - 6)
+          continue
+        }
+        if (wheat > 0.6) {
+          const t = Math.min(1, (wheat - 0.6) / 1.2)
+          ctx.strokeStyle = `rgba(255,${Math.round(140 - 100 * t)},30,${0.25 + 0.5 * t})`
+          ctx.lineWidth = thick + 6 + 6 * t
+          ctx.beginPath()
+          ctx.moveTo(a.x, a.y)
+          ctx.lineTo(b.x, b.y)
+          ctx.stroke()
+        }
         ctx.strokeStyle = v !== null ? voltageColor(v, maxV, inkNeutral) : inkNeutral
-        ctx.lineWidth = 2.5
+        ctx.lineWidth = thick
         ctx.setLineDash([])
         ctx.beginPath()
         ctx.moveTo(a.x, a.y)
@@ -1012,6 +1088,22 @@ export default function CircuitCanvas({
         if (comp.value !== undefined && def.defaultValue !== null) {
           ctx.fillStyle = labelColor
           ctx.fillText(formatValue(comp.value, def.unit), comp.x, comp.y + 34)
+        }
+
+        // battery: nominal voltage + charge; supply: mode
+        if (comp.type === 'battery') {
+          const p = batteryParams(comp, liveFrame.soc)
+          ctx.font = '11px Inter, system-ui, sans-serif'
+          ctx.fillStyle = labelColor
+          ctx.textAlign = 'center'
+          ctx.fillText(`${formatValue(cellOcv(p.chemistry, 0.5) * p.cells, 'V')} · ${Math.round(p.soc * 100)}%`, comp.x, comp.y + 34)
+        }
+        if (comp.type === 'bench_supply' && solved) {
+          const mode = liveFrame.supplyMode[comp.id] ?? 'CV'
+          ctx.font = 'bold 10px JetBrains Mono, monospace'
+          ctx.fillStyle = mode === 'CC' ? '#ef4444' : '#10b981'
+          ctx.textAlign = 'center'
+          ctx.fillText(mode, comp.x + 30, comp.y - 20)
         }
 
         // live meter readouts

@@ -66,7 +66,7 @@ describe('SandboxPanel', () => {
       ]
     )
     await waitFor(
-      () => expect(useCircuitStore.getState().simResult?.elementCurrents['r1']).toBeCloseTo(0.05, 6),
+      () => expect(useCircuitStore.getState().simResult?.elementCurrents['r1']).toBeCloseTo(0.05, 4),
       { timeout: 2000 }
     )
   })

@@ -19,7 +19,16 @@
 import { GROUND, LED_PARAMS, type Netlist, type NetlistElement } from './solver'
 import type { ACNetlist, ACNetlistElement } from './acSolver'
 import type { TransientElement, TransientNetlist } from './transient'
-import { ELEMENTS, type CircuitComponent, type Wire } from './elements'
+import { DEFAULT_GAUGE, MIN_WIRE_LENGTH, drawnLength, wireResistance } from './wire'
+import {
+  BENCH_DEFAULT_LIMIT,
+  CHEMISTRIES,
+  DEFAULT_CHEMISTRY,
+  packOcv,
+  packResistance,
+  type BatteryParams
+} from './battery'
+import { ELEMENTS, terminalPosition, type CircuitComponent, type Wire } from './elements'
 
 /** Resistance used for closed switches, ammeters, and DC-shorted inductors */
 const SHORT_RESISTANCE = 1e-3
@@ -127,7 +136,11 @@ function computeTerminalNodes(
     // like a battery's (−) post. Beginners don't need to know about ground yet.
     const src = components.find(
       (c) =>
-        c.type === 'voltage_source' || c.type === 'ac_voltage_source' || c.type === 'current_source'
+        c.type === 'voltage_source' ||
+        c.type === 'ac_voltage_source' ||
+        c.type === 'current_source' ||
+        c.type === 'battery' ||
+        c.type === 'bench_supply'
     )
     if (src) groupNames.set(uf.find(terminalKey(src.id, 1)), GROUND)
   }
@@ -213,8 +226,16 @@ export function buildNetlist(
         elements.push({ id: c.id, type: 'resistor', value, nodes })
         break
       case 'voltage_source':
+      case 'bench_supply':
         elements.push({ id: c.id, type: 'voltage_source', value, nodes })
         break
+      case 'battery': {
+        const p = batteryParams(c)
+        const internal = `${c.id}#int`
+        elements.push({ id: c.id, type: 'voltage_source', value: packOcv(p), nodes: [internal, nodes[1]] })
+        elements.push({ id: `${c.id}#ri`, type: 'resistor', value: packResistance(p), nodes: [internal, nodes[0]] })
+        break
+      }
       case 'ac_voltage_source':
         // In DC steady state an AC source averages to 0 V → a short.
         elements.push({ id: c.id, type: 'voltage_source', value: 0, nodes })
@@ -331,6 +352,8 @@ export function buildACNetlist(
         })
         break
       case 'voltage_source':
+      case 'battery':
+      case 'bench_supply':
         // A DC source contributes nothing at the analysis frequency → short it.
         warnings.push(`${labelOf(c)}: DC source treated as a short in AC analysis`)
         elements.push({
@@ -375,19 +398,80 @@ export interface TransientNetlistBuildResult {
   warnings: string[]
 }
 
+export interface TransientBuildOptions {
+  /** live state of charge per battery id (falls back to the component's `soc`, then 1) */
+  soc?: Record<string, number>
+}
+
+/** Length (m) of a wire: its explicit length, or measured from the drawing. */
+export function wireLength(w: Wire, byId: Map<string, CircuitComponent>): number {
+  if (w.length !== undefined && w.length > 0) return w.length
+  const a = byId.get(w.fromComponentId)
+  const b = byId.get(w.toComponentId)
+  if (!a || !b) return MIN_WIRE_LENGTH
+  const pa = terminalPosition(a, w.fromTerminal)
+  const pb = terminalPosition(b, w.toTerminal)
+  return drawnLength(pa.x, pa.y, pb.x, pb.y)
+}
+
+export function batteryParams(c: CircuitComponent, soc?: Record<string, number>): BatteryParams {
+  const chemistry = c.chemistry ?? DEFAULT_CHEMISTRY
+  return {
+    chemistry,
+    cells: Math.max(1, Math.round(c.cells ?? CHEMISTRIES[chemistry].defaultCells)),
+    soc: soc?.[c.id] ?? c.soc ?? 1
+  }
+}
+
 /**
- * Build the netlist for time-domain simulation. Capacitors and inductors keep
- * their real values; AC sources become sine sources; damaged (burnt-out)
- * components are open circuits. If no ground is placed, the negative terminal
- * of the first source becomes the reference automatically.
+ * Build the netlist for time-domain simulation.
+ *   - Every wire is a real copper resistor (gauge × length); melted wires are open.
+ *   - Capacitors and inductors keep their real values; AC sources become sines.
+ *   - Batteries are their open-circuit voltage behind an internal resistance;
+ *     bench supplies are voltage sources with a current limit (CV/CC).
+ *   - Damaged (burnt-out) components are open circuits.
+ *   - With no ground placed, the first source's (−) terminal is the reference.
  */
 export function buildTransientNetlist(
   components: CircuitComponent[],
-  wires: Wire[]
+  wires: Wire[],
+  opts: TransientBuildOptions = {}
 ): TransientNetlistBuildResult {
-  const { terminalNodes, wiredTerminals, warnings } = computeTerminalNodes(components, wires, true)
-
+  // Every terminal is its own node; wires connect them as resistors.
+  const { terminalNodes, warnings, byId } = computeTerminalNodes(components, [], true)
+  const wiredTerminals = new Set<string>()
   const elements: TransientElement[] = []
+
+  for (const w of wires) {
+    const from = byId.get(w.fromComponentId)
+    const to = byId.get(w.toComponentId)
+    if (!from || !to) {
+      warnings.push(`Wire ${w.id} references a missing component`)
+      continue
+    }
+    if (
+      w.fromTerminal >= ELEMENTS[from.type].terminals.length ||
+      w.toTerminal >= ELEMENTS[to.type].terminals.length
+    ) {
+      warnings.push(`Wire ${w.id} references an invalid terminal`)
+      continue
+    }
+    const a = terminalKey(w.fromComponentId, w.fromTerminal)
+    const b = terminalKey(w.toComponentId, w.toTerminal)
+    wiredTerminals.add(a)
+    wiredTerminals.add(b)
+    if (w.damaged) continue // melted → open
+    const na = terminalNodes[a]
+    const nb = terminalNodes[b]
+    if (na === nb) continue // both ends already the same node (e.g. two grounds)
+    elements.push({
+      id: w.id,
+      type: 'resistor',
+      value: wireResistance(w.gauge ?? DEFAULT_GAUGE, wireLength(w, byId)),
+      nodes: [na, nb]
+    })
+  }
+
   for (const c of components) {
     if (c.type === 'ground' || c.type === 'wire_node') continue
     if (c.damaged) continue // burnt out → open circuit
@@ -411,6 +495,22 @@ export function buildTransientNetlist(
       case 'voltage_source':
       case 'current_source':
         elements.push({ id: c.id, type: c.type, value, nodes })
+        break
+      case 'battery': {
+        const p = batteryParams(c, opts.soc)
+        const internal = `${c.id}#int`
+        elements.push({ id: c.id, type: 'voltage_source', value: packOcv(p), nodes: [internal, nodes[1]] })
+        elements.push({ id: `${c.id}#ri`, type: 'resistor', value: packResistance(p), nodes: [internal, nodes[0]] })
+        break
+      }
+      case 'bench_supply':
+        elements.push({
+          id: c.id,
+          type: 'supply',
+          value,
+          limit: c.currentLimit ?? BENCH_DEFAULT_LIMIT,
+          nodes
+        })
         break
       case 'ac_voltage_source':
         elements.push({

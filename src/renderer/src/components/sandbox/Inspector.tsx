@@ -4,6 +4,8 @@ import { ELEMENTS, formatValue, parseValue } from '../../sim/elements'
 import { terminalKey } from '../../sim/netlist'
 import { wireCurrent, wireNetVoltage } from '../../sim/measure'
 import PartHealth from './PartHealth'
+import WireDetails from './WireDetails'
+import { BatteryDetails, SupplyDetails } from './SourceDetails'
 
 /** True when the Inspector renders as a phone bottom sheet. */
 const SheetContext = createContext<(() => void) | null>(null)
@@ -98,7 +100,7 @@ function InspectorBody(): JSX.Element {
     return (
       <Shell>
         <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Wire</p>
-        <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">Net connection</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">Copper wire{selectedWire.damaged ? ' · melted' : ''}</p>
 
         <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">
           Measurements {ac && <span className="text-brand-yellow">· AC (RMS)</span>}
@@ -132,6 +134,8 @@ function InspectorBody(): JSX.Element {
             {simResult?.error ?? 'No simulation yet'}
           </p>
         )}
+
+        <WireDetails wire={selectedWire} current={netI} />
 
         <button
           onClick={() => removeWire(selectedWire.id)}
@@ -311,6 +315,8 @@ function InspectorBody(): JSX.Element {
           </p>
         )}
 
+      {component.type === 'battery' && <BatteryDetails c={component} />}
+      {component.type === 'bench_supply' && <SupplyDetails c={component} />}
       <PartHealth component={component} />
 
       <div className="flex gap-2 mb-4">

@@ -26,6 +26,7 @@ import Inspector from './Inspector'
 import Oscilloscope from './Oscilloscope'
 import SimControls from './SimControls'
 import FailureToast from './FailureToast'
+import WireZoom from './WireZoom'
 import ViewToggle from './ViewToggle'
 import ExamplesGallery from '../examples/ExamplesGallery'
 import ExampleGuide from '../examples/ExampleGuide'
@@ -393,6 +394,7 @@ export default function SandboxPanel(): JSX.Element {
         />
         <div className={`flex-1 min-w-0 min-h-0 relative flex flex-col md:flex-row ${mobile ? 'order-first' : ''}`}>
           <FailureToast />
+          <WireZoom />
           <BadgeToast />
           {components.length === 0 && !pendingType && !activeLevel && !activeCircuitQuiz && (
             <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none p-4">

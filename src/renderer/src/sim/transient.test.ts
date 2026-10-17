@@ -180,7 +180,9 @@ describe('buildTransientNetlist', () => {
     ]
     const wires = [wire('V1', 0, 'R1', 0), wire('R1', 1, 'V1', 1)]
     const { netlist } = buildTransientNetlist(comps, wires)
-    expect(netlist.elements.map((e) => e.id)).toEqual(['V1'])
+    // wires are copper resistors now; the damaged resistor is simply absent
+    expect(netlist.elements.map((e) => e.id).filter((id) => !id.startsWith('V1') && !id.startsWith('R1-') && id !== 'V10-R10' && id !== 'R11-V11')).toEqual([])
+    expect(netlist.elements.some((e) => e.id === 'R1')).toBe(false)
   })
 
   it('keeps capacitors and turns AC sources into sine sources', () => {

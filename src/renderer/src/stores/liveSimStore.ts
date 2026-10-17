@@ -36,6 +36,10 @@ export const liveFrame = {
   heat: {} as Record<string, number>,
   /** simulated seconds */
   time: 0,
+  /** battery id → state of charge 0..1 */
+  soc: {} as Record<string, number>,
+  /** bench supply id → regulation mode */
+  supplyMode: {} as Record<string, 'CV' | 'CC'>,
   /** rolling node-voltage history for the time-domain scope */
   history: [] as ScopeSample[],
   /** bumps whenever liveFrame changes (cheap change detection for renderers) */

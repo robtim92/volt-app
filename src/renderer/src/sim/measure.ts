@@ -17,6 +17,9 @@ import { terminalKey } from './netlist'
  * terminal 1 the current exits into the attached wire.
  */
 export function wireCurrent(wire: Wire, sim: SimulationResult): number | null {
+  // Live simulation: wires are real resistors, so their current is measured directly
+  const own = sim.elementCurrents[wire.id]
+  if (own !== undefined) return own
   const fromI = sim.elementCurrents[wire.fromComponentId]
   if (fromI !== undefined) {
     return wire.fromTerminal === 1 ? fromI : -fromI

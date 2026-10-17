@@ -33,10 +33,11 @@ function play(level: Level, components: CircuitComponent[], wires: Wire[], secon
     }
     const snap = sim.advance(frame, suggestMaxStep(built.netlist), 100000)
     const readings = { ...snap, terminalNodes: built.terminalNodes }
-    const th = stepThermal(comps, readings, heat, frame)
+    const th = stepThermal(comps, readings, heat, frame, wires)
     heat = th.heat
     if (th.events.length) {
       comps = comps.map((c) => (th.events.some((e) => e.componentId === c.id) ? { ...c, damaged: true } : c))
+      wires = wires.map((w) => (th.events.some((e) => e.componentId === w.id) ? { ...w, damaged: true } : w))
       built = buildTransientNetlist(comps, wires)
       sim = new TransientSimulator(built.netlist, sim.state)
     }

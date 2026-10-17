@@ -2,6 +2,35 @@
 
 ---
 
+## Gamified 3D Lab — Step 5 (realistic wires and power sources)
+**Date:** October 17, 2026
+
+### Shipped
+- **Wires are real copper** (`sim/wire.ts`): every wire is a resistor in the live sim, from its gauge
+  (AWG 4–30, default 22) and length (drawn length, or set in metres). Annealed-copper resistivity;
+  published Ω/km within 2%. Ampacity table drives wire heating; overloaded wires glow and melt open.
+  Inspector: gauge, length, resistance, voltage drop, heat, Replace wire. Schematic and 3D draw thicker
+  wire for heavier gauges.
+- **Batteries** (`sim/battery.ts`): AA / 9 V alkaline, Li-ion 18650, LiFePO4, lead-acid. Open-circuit
+  voltage follows state of charge, internal resistance makes voltage sag under load, charge drains in
+  real (sim) time, shorts overheat the pack. Inspector shows charge, time left, Recharge. Per-chemistry
+  3D models.
+- **Bench supply**: voltage setpoint + current limit; switches between CV and CC within the time step.
+  3D model with live V/A display and CV/CC light.
+- **Look inside the wire**: animated copper lattice with electrons jiggling and drifting (speed-up
+  shown), stats for current density, drift speed, drop and heat, and a side-by-side gauge comparison.
+- **Examples**: new "Power & wiring" category: battery under load, long wires and voltage drop, bench
+  supply current limit. Breaker example now uses 14 AWG wire (22 AWG would melt at 9 A).
+- Test harnesses for examples, levels and lessons now include wire heating.
+
+### Test status
+281 tests passing · typecheck clean · web build OK · new examples checked in headless Chromium (desktop + phone).
+
+### Next
+Phase H — home power systems.
+
+---
+
 ## Gamified 3D Lab — Steps 0–4 (live sim, heat/damage, 3D bench, campaign)
 **Date:** October 17, 2026
 

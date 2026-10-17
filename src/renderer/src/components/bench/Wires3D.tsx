@@ -12,6 +12,8 @@ import * as THREE from 'three'
 import type { CircuitComponent, Wire } from '../../sim/elements'
 import { wireCurrent, wireNetVoltage } from '../../sim/measure'
 import { terminalWorld, voltageRGB } from './benchMath'
+import { liveFrame } from '@stores/liveSimStore'
+import { DEFAULT_GAUGE, diameterMm } from '../../sim/wire'
 import { displayResult } from './liveReadings'
 
 interface WireGeo {
@@ -39,10 +41,24 @@ function buildCurve(a: [number, number, number], b: [number, number, number]): T
 
 function WireTube({ geo }: { geo: WireGeo }): JSX.Element {
   const mat = useRef<THREE.MeshStandardMaterial>(null)
-  const tube = useMemo(() => new THREE.TubeGeometry(geo.curve, 32, 0.035, 8, false), [geo.curve])
+  // insulated radius grows with conductor size (22 AWG ≈ 0.035 world units)
+  const radius = Math.max(0.022, Math.min(0.09, 0.035 * Math.sqrt(diameterMm(geo.wire.gauge ?? DEFAULT_GAUGE) / 0.644)))
+  const tube = useMemo(() => new THREE.TubeGeometry(geo.curve, 32, radius, 8, false), [geo.curve, radius])
+  const HOT = useMemo(() => new THREE.Color('#ff5a1f'), [])
   useFrame(() => {
     const m = mat.current
     if (!m) return
+    if (geo.wire.damaged) {
+      m.color.set('#1c1917')
+      m.emissiveIntensity = 0
+      m.opacity = 0.55
+      return
+    }
+    m.opacity = 1
+    const heat = liveFrame.heat[geo.wire.id] ?? 0
+    const t = Math.max(0, Math.min(1, (heat - 0.6) / 1.2))
+    m.emissive.copy(HOT)
+    m.emissiveIntensity = t * 2
     const r = displayResult()
     if (!r?.solved) {
       m.color.setRGB(0.55, 0.6, 0.68)
@@ -55,7 +71,7 @@ function WireTube({ geo }: { geo: WireGeo }): JSX.Element {
   })
   return (
     <mesh geometry={tube} castShadow>
-      <meshStandardMaterial ref={mat} roughness={0.45} />
+      <meshStandardMaterial ref={mat} roughness={0.45} transparent />
     </mesh>
   )
 }

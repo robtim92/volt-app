@@ -41,6 +41,8 @@ interface UIState {
   exampleStep: number
   /** Whether the examples gallery is open. */
   examplesOpen: boolean
+  /** Wire shown in the "look inside the wire" view. */
+  wireZoomId: string | null
 
   toggleDarkMode: () => void
   setActiveTrack: (track: Track) => void
@@ -54,6 +56,7 @@ interface UIState {
   startLevel: (id: string) => void
   exitLevel: () => void
   setExamplesOpen: (open: boolean) => void
+  setWireZoom: (id: string | null) => void
   openExample: (id: string) => void
   closeExample: () => void
   setExampleStep: (step: number) => void
@@ -80,6 +83,7 @@ export const useUIStore = create<UIState>()(
       activeExampleId: null,
       exampleStep: 0,
       examplesOpen: false,
+      wireZoomId: null,
 
       // Actions
       toggleDarkMode: () => set((s) => ({ darkMode: !s.darkMode })),
@@ -94,6 +98,7 @@ export const useUIStore = create<UIState>()(
       startLevel: (id) =>
         set({ activeLevelId: id, activeCircuitQuiz: null, activeExampleId: null, activePanel: 'sandbox' }),
       setExamplesOpen: (examplesOpen) => set({ examplesOpen }),
+      setWireZoom: (wireZoomId) => set({ wireZoomId }),
       openExample: (id) =>
         set({
           activeExampleId: id,

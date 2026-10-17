@@ -65,6 +65,8 @@ interface CircuitState {
   removeComponent: (id: string) => void
   removeComponents: (ids: string[]) => void
   updateComponent: (id: string, patch: Partial<CircuitComponent>) => void
+  /** Change a wire's properties (gauge, length, damaged). No history push. */
+  updateWire: (id: string, patch: Partial<Wire>) => void
   toggleSwitch: (id: string) => void
   addWire: (wire: Wire) => void
   removeWire: (id: string) => void
@@ -146,6 +148,9 @@ export const useCircuitStore = create<CircuitState>()((set) => ({
     set((s) => ({
       components: s.components.map((c) => (c.id === id ? { ...c, ...patch } : c))
     })),
+
+  updateWire: (id, patch) =>
+    set((s) => ({ wires: s.wires.map((w) => (w.id === id ? { ...w, ...patch } : w)) })),
 
   toggleSwitch: (id) =>
     set((s) => ({

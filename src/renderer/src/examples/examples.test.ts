@@ -12,6 +12,7 @@ import { ELEMENTS, type CircuitComponent, type Wire } from '../sim/elements'
 
 interface RunResult {
   comps: CircuitComponent[]
+  wires: Wire[]
   failures: ThermalEvent[]
   arcs: number
   min: Record<string, number>
@@ -29,6 +30,7 @@ function run(
   toggles: { at: number; id: string }[] = []
 ): RunResult {
   let comps = components.map((c) => ({ ...c }))
+  wires = wires.map((w) => ({ ...w }))
   let built = buildTransientNetlist(comps, wires)
   let sim = new TransientSimulator(built.netlist)
   let heat: Record<string, number> = {}
@@ -55,10 +57,11 @@ function run(
       min[n] = Math.min(min[n] ?? Infinity, v)
       max[n] = Math.max(max[n] ?? -Infinity, v)
     }
-    const r = stepThermal(comps, { ...snap, terminalNodes: built.terminalNodes }, heat, frame)
+    const r = stepThermal(comps, { ...snap, terminalNodes: built.terminalNodes }, heat, frame, wires)
     heat = r.heat
     if (r.events.length) {
       failures.push(...r.events)
+      wires = wires.map((w) => (r.events.some((ev) => ev.componentId === w.id) ? { ...w, damaged: true } : w))
       comps = comps.map((c) => {
         const e = r.events.find((ev) => ev.componentId === c.id)
         if (!e) return c
@@ -68,7 +71,7 @@ function run(
       sim = new TransientSimulator(built.netlist, sim.state)
     }
   }
-  return { comps, failures, arcs, min, max, last: snap.nodeVoltages, currents: snap.elementCurrents }
+  return { comps, wires, failures, arcs, min, max, last: snap.nodeVoltages, currents: snap.elementCurrents }
 }
 
 const nodeOf = (ex: ReturnType<typeof getExample>, id: string, t: number): string =>
@@ -175,5 +178,38 @@ describe('example circuits', () => {
     const r = run(ex.circuit.components, ex.circuit.wires, 3, 1 / 60, [{ at: 0.5, id: 'SW2' }])
     expect(r.failures.map((f) => `${f.componentId}:${f.kind}`)).toEqual(['CB1:trip'])
     expect(r.comps.find((c) => c.id === 'CB1')!.closed).toBe(false)
+  })
+
+  it('battery: light load ≈ 9.5 V, heavy load sags by about a volt', () => {
+    const ex = getExample('battery-sag')!
+    const node = nodeOf(ex, 'VM1', 0)
+    const light = run(ex.circuit.components, ex.circuit.wires, 0.2, 1 / 60)
+    expect(light.last[node]).toBeGreaterThan(9.3)
+    const heavy = run(ex.circuit.components, ex.circuit.wires, 0.5, 1 / 60, [{ at: 0.1, id: 'SW1' }])
+    expect(light.last[node] - heavy.last[node]).toBeGreaterThan(0.8)
+    expect(heavy.failures).toEqual([])
+  })
+
+  it('long run: 18 AWG drops ~2.7 V, 12 AWG much less, 22 AWG starves the lamp', () => {
+    const ex = getExample('long-wire-drop')!
+    const vLoad = (wires: Wire[]): number => {
+      const r = run(ex.circuit.components, wires, 0.2, 1 / 60)
+      const built = buildTransientNetlist(ex.circuit.components, wires)
+      return r.last[built.terminalNodes['VM1:0']] - r.last[built.terminalNodes['VM1:1']]
+    }
+    const v18 = vLoad(ex.circuit.wires)
+    expect(v18).toBeGreaterThan(9)
+    expect(v18).toBeLessThan(9.6)
+    const regauge = (g: number): Wire[] => ex.circuit.wires.map((w) => (w.length ? { ...w, gauge: g } : w))
+    expect(vLoad(regauge(12))).toBeGreaterThan(11)
+    expect(vLoad(regauge(22))).toBeLessThan(7.2)
+  })
+
+  it('bench supply: 20 mA limit protects a bare LED; 0.1 A burns it', () => {
+    const ex = getExample('bench-current-limit')!
+    const ok = run(ex.circuit.components, ex.circuit.wires, 1, 1 / 60)
+    expect(Math.abs(ok.currents.A1)).toBeCloseTo(0.02, 3)
+    const hot = ex.circuit.components.map((c) => (c.id === 'PS1' ? { ...c, currentLimit: 0.1 } : c))
+    expect(run(hot, ex.circuit.wires, 2, 1 / 60).failures.map((f) => f.componentId)).toContain('LED1')
   })
 })

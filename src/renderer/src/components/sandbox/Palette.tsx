@@ -14,6 +14,8 @@ const PALETTE_ICONS: Partial<Record<ComponentType, string>> = {
   capacitor: '⊣⊢',
   inductor: '∿',
   voltage_source: '⎓',
+  battery: '🔋',
+  bench_supply: '⏻',
   current_source: '→',
   ac_voltage_source: '⏦',
   transformer: '⇄',
@@ -51,7 +53,7 @@ export default function Palette({ pendingType, onPick, allowedTypes, horizontal 
                 }`}
               >
                 <span className="font-mono text-base">{PALETTE_ICONS[def.type] ?? '?'}</span>
-                <span className="truncate max-w-full px-1">{def.displayName.replace('Voltage Source', 'Battery').replace('Circuit Breaker', 'Breaker')}</span>
+                <span className="truncate max-w-full px-1">{def.displayName.replace('Voltage Source', 'DC Source').replace('Circuit Breaker', 'Breaker')}</span>
               </button>
             )
           })}

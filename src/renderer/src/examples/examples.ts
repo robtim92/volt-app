@@ -10,7 +10,7 @@ import type { CircuitComponent, Wire } from '../sim/elements'
 import type { CircuitPreset } from '../lessons/types'
 import type { BenchView } from '../stores/uiStore'
 
-export type ExampleCategory = 'Basics' | 'Time & energy' | 'AC & signals' | 'Protection & safety'
+export type ExampleCategory = 'Basics' | 'Power & wiring' | 'Time & energy' | 'AC & signals' | 'Protection & safety'
 
 export interface ExampleCircuit {
   id: string
@@ -39,13 +39,16 @@ const c = (
   y: number,
   extra: Partial<CircuitComponent> = {}
 ): CircuitComponent => ({ id, type, x, y, rotation: 0, label: id, ...extra })
-const w = (a: string, at: number, b: string, bt: number): Wire => ({
+const w = (a: string, at: number, b: string, bt: number, extra: Partial<Wire> = {}): Wire => ({
   id: `w-${a}${at}-${b}${bt}`,
   fromComponentId: a,
   fromTerminal: at,
   toComponentId: b,
-  toTerminal: bt
+  toTerminal: bt,
+  ...extra
 })
+/** house wiring: 14 AWG, the standard pairing for a 15 A breaker */
+const AWG14 = { gauge: 14 }
 const V = 90 // rotation for vertical parts (terminal 0 on top)
 
 export const EXAMPLES: ExampleCircuit[] = [
@@ -320,6 +323,97 @@ export const EXAMPLES: ExampleCircuit[] = [
     ]
   },
 
+  // ── Power & wiring ─────────────────────────────────────────────────────────
+  {
+    id: 'battery-sag',
+    title: 'A real battery under load',
+    category: 'Power & wiring',
+    level: 'Beginner',
+    summary: 'Draw more current and the battery’s voltage sags, and it drains faster.',
+    concept: 'A battery is an ideal voltage behind a small internal resistance: V = OCV − I × r.',
+    circuit: {
+      components: [
+        c('B1', 'battery', 180, 300, { chemistry: 'alkaline_9v', rotation: V }),
+        c('R1', 'resistor', 420, 300, { value: 100, rating: 2, rotation: V, label: 'Light load' }),
+        c('SW1', 'switch', 580, 220, { closed: false, rotation: V }),
+        c('R2', 'resistor', 580, 360, { value: 15, rating: 10, rotation: V, label: 'Heavy load' }),
+        c('VM1', 'voltmeter', 300, 300, { rotation: V }),
+        c('GND', 'ground', 180, 440)
+      ],
+      wires: [
+        w('B1', 0, 'VM1', 0),
+        w('VM1', 0, 'R1', 0),
+        w('R1', 0, 'SW1', 0),
+        w('SW1', 1, 'R2', 0),
+        w('B1', 1, 'VM1', 1),
+        w('VM1', 1, 'R1', 1),
+        w('R1', 1, 'R2', 1),
+        w('B1', 1, 'GND', 0)
+      ]
+    },
+    steps: [
+      'A fresh 9 V alkaline reads about 9.5 V with only the 100 Ω light load: it delivers under 0.1 A. Select B1 to see its charge and internal resistance.',
+      'Double-click SW1 to add the 15 Ω heavy load. The voltmeter sags by about a volt: 0.65 A through roughly 1.7 Ω of internal resistance.',
+      'Watch “time left” on B1 shrink. Speed the sim up and the charge bar drains, and the voltage falls as it empties.',
+      'Change B1’s chemistry to Li-ion (2 cells). Its internal resistance is tiny, so the sag almost disappears. That is why power tools use lithium packs.'
+    ],
+    view: 'split'
+  },
+  {
+    id: 'long-wire-drop',
+    title: 'Long wires and voltage drop',
+    category: 'Power & wiring',
+    level: 'Intermediate',
+    summary: 'A 12 V lamp at the end of a 10 m run of thin wire gets much less than 12 V.',
+    concept: 'Wire is a resistor too: R = ρ × length ÷ area. Thin, long runs waste voltage as heat.',
+    circuit: {
+      components: [
+        c('PS1', 'bench_supply', 180, 300, { value: 12, currentLimit: 10, rotation: V }),
+        c('R1', 'resistor', 640, 300, { value: 1.44, rating: 150, rotation: V, label: 'Lamp 100 W' }),
+        c('VM1', 'voltmeter', 780, 300, { rotation: V }),
+        c('GND', 'ground', 180, 440)
+      ],
+      wires: [
+        w('PS1', 0, 'R1', 0, { gauge: 18, length: 10 }),
+        w('R1', 1, 'PS1', 1, { gauge: 18, length: 10 }),
+        w('R1', 0, 'VM1', 0),
+        w('R1', 1, 'VM1', 1),
+        w('PS1', 1, 'GND', 0)
+      ]
+    },
+    steps: [
+      'Each wire to the lamp is 10 m of 18 AWG: about 0.21 Ω each way. The lamp sees only about 9.3 V and draws about 6.5 A.',
+      'Select a long wire and look at its voltage drop. About 1.4 V is lost in each wire, warming it instead of lighting the lamp.',
+      'Change both long wires to 12 AWG. Thicker copper has a quarter of the resistance, so the lamp gets back above 11 V.',
+      'Now try 22 AWG (rated about 3 A). The lamp drops to about 7 V and the wire glows: it is carrying well over its rating. Push enough current and a wire melts open.',
+      'Use 🔍 “Look inside the wire” to see why: the same current squeezed through a smaller copper area makes the electrons drift faster.'
+    ],
+    view: 'split'
+  },
+  {
+    id: 'bench-current-limit',
+    title: 'Bench supply current limit',
+    category: 'Power & wiring',
+    level: 'Beginner',
+    summary: 'A current-limited supply can run an LED with no resistor, until you raise the limit.',
+    concept: 'A bench supply holds its voltage (CV) until the load wants more than the limit, then holds the current (CC) and lets the voltage drop.',
+    circuit: {
+      components: [
+        c('PS1', 'bench_supply', 180, 300, { value: 12, currentLimit: 0.02, rotation: V }),
+        c('A1', 'ammeter', 380, 180),
+        c('LED1', 'led', 580, 180),
+        c('GND', 'ground', 180, 440)
+      ],
+      wires: [w('PS1', 0, 'A1', 0), w('A1', 1, 'LED1', 0), w('LED1', 1, 'PS1', 1), w('PS1', 1, 'GND', 0)]
+    },
+    steps: [
+      'The supply is set to 12 V with a 20 mA limit. An LED on 12 V with no resistor would normally burn out instantly.',
+      'Instead the supply switches to CC (constant current): its display drops to about 2 V and the ammeter reads 20 mA. The LED is happy.',
+      'Select PS1 and raise the current limit to 0.1 A. The LED is pushed to 100 mA and burns out within a second.',
+      'Set the limit back to 0.02 A and replace the LED. Engineers set a low current limit when powering an untested circuit for the first time.'
+    ]
+  },
+
   // ── Protection & safety ────────────────────────────────────────────────────
   {
     id: 'breaker-overload',
@@ -341,29 +435,30 @@ export const EXAMPLES: ExampleCircuit[] = [
         c('GND', 'ground', 120, 420)
       ],
       wires: [
-        w('Vac1', 0, 'CB1', 0),
-        w('CB1', 1, 'SW1', 0),
-        w('SW1', 0, 'SW2', 0),
-        w('SW2', 0, 'SW3', 0),
-        w('SW1', 1, 'R1', 0),
-        w('SW2', 1, 'R2', 0),
-        w('SW3', 1, 'R3', 0),
-        w('R1', 1, 'Vac1', 1),
-        w('R1', 1, 'R2', 1),
-        w('R2', 1, 'R3', 1),
-        w('Vac1', 1, 'GND', 0)
+        w('Vac1', 0, 'CB1', 0, AWG14),
+        w('CB1', 1, 'SW1', 0, AWG14),
+        w('SW1', 0, 'SW2', 0, AWG14),
+        w('SW2', 0, 'SW3', 0, AWG14),
+        w('SW1', 1, 'R1', 0, AWG14),
+        w('SW2', 1, 'R2', 0, AWG14),
+        w('SW3', 1, 'R3', 0, AWG14),
+        w('R1', 1, 'Vac1', 1, AWG14),
+        w('R1', 1, 'R2', 1, AWG14),
+        w('R2', 1, 'R3', 1, AWG14),
+        w('Vac1', 1, 'GND', 0, AWG14)
       ]
     },
     steps: [
       'The heater and lamp are on: about 9 A from a 120 V supply (170 V peak). Select CB1 to see its load.',
       'Double-click SW2 to switch on the microwave too. The total jumps to about 18 A and the breaker trips within a second.',
       'Turn something off, then reset CB1 from the Inspector. It holds again.',
+      'The wires are 14 AWG, rated about 15 A. Select one and change it to 22 AWG (rated about 3 A): it melts at the normal 9 A load, long before the 15 A breaker reacts. That is why the breaker must match the wire.',
       'This is a simulation. Real mains wiring is dangerous: always leave it to a licensed electrician.'
     ]
   }
 ]
 
-export const EXAMPLE_CATEGORIES: ExampleCategory[] = ['Basics', 'Time & energy', 'AC & signals', 'Protection & safety']
+export const EXAMPLE_CATEGORIES: ExampleCategory[] = ['Basics', 'Power & wiring', 'Time & energy', 'AC & signals', 'Protection & safety']
 
 export function getExample(id: string): ExampleCircuit | undefined {
   return EXAMPLES.find((e) => e.id === id)

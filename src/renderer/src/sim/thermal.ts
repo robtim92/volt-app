@@ -21,6 +21,9 @@
  */
 import { formatValue, type CircuitComponent, type ComponentType } from './elements'
 import { terminalKey } from './netlist'
+import type { Wire } from './elements'
+import { CHEMISTRIES, DEFAULT_CHEMISTRY } from './battery'
+import { DEFAULT_GAUGE, ampacity, gaugeLabel } from './wire'
 
 export type FailureKind = 'burnout' | 'pop' | 'fuse' | 'trip'
 
@@ -50,14 +53,20 @@ export const THERMAL_PROFILES: Partial<Record<ComponentType, ThermalProfile>> = 
   // Thermal-magnetic breaker: trips on sustained overload
   breaker: { rating: 15, stress: 'current', tau: 0.4, failAt: 1, failure: 'trip' },
   // GFCI modelled as a fast trip on its (leakage) current rating
-  gfci: { rating: 0.005, stress: 'current', tau: 0.02, failAt: 1, failure: 'trip' }
+  gfci: { rating: 0.005, stress: 'current', tau: 0.02, failAt: 1, failure: 'trip' },
+  // Batteries: rating = the chemistry's comfortable continuous current
+  battery: { rating: 1, stress: 'current', tau: 4, failAt: 3, failure: 'burnout' }
 }
+
+/** Wires heat on current against their gauge's ampacity, and melt open. */
+export const WIRE_PROFILE: ThermalProfile = { rating: 3, stress: 'current', tau: 1.5, failAt: 2, failure: 'burnout' }
 
 /** Effective rating: the component's own override, else breakers use `value`, else the default. */
 export function ratingOf(c: CircuitComponent): number | null {
   const prof = THERMAL_PROFILES[c.type]
   if (!prof) return null
   if (c.type === 'breaker' || c.type === 'gfci') return c.value ?? prof.rating
+  if (c.type === 'battery') return c.rating ?? CHEMISTRIES[c.chemistry ?? DEFAULT_CHEMISTRY].maxCurrent
   return c.rating ?? prof.rating
 }
 
@@ -125,6 +134,8 @@ function failureMessage(c: CircuitComponent, stress: number): string {
       return `💥 ${name} popped — ${formatValue(stress, 'V')} across a capacitor rated for ${formatValue(rating, 'V')}.`
     case 'ammeter':
       return `⚡ ${name}'s fuse blew — over ${formatValue(rating, 'A')}. An ammeter goes in series with a load, never straight across a source.`
+    case 'battery':
+      return `🔥 ${name} overheated — it was asked for ${formatValue(stress, 'A')} but is only good for about ${formatValue(rating, 'A')}. A short circuit drains and cooks a battery fast.`
     case 'breaker':
       return `⚡ ${name} tripped — ${formatValue(stress, 'A')} exceeds its ${formatValue(rating, 'A')} rating. Reduce the load, then reset it.`
     case 'gfci':
@@ -144,10 +155,28 @@ export function stepThermal(
   components: CircuitComponent[],
   readings: ElectricalReadings,
   heat: Record<string, number>,
-  dt: number
+  dt: number,
+  wires: Wire[] = []
 ): ThermalStepResult {
   const next: Record<string, number> = {}
   const events: ThermalEvent[] = []
+  for (const w of wires) {
+    if (w.damaged) continue
+    const gauge = w.gauge ?? DEFAULT_GAUGE
+    const rating = ampacity(gauge)
+    const i = readings.stats?.irms[w.id] ?? Math.abs(readings.elementCurrents[w.id] ?? 0)
+    const q = i / rating
+    const prev = heat[w.id] ?? 0
+    const theta = q + (prev - q) * Math.exp(-dt / WIRE_PROFILE.tau)
+    next[w.id] = theta
+    if (theta >= WIRE_PROFILE.failAt) {
+      events.push({
+        componentId: w.id,
+        kind: 'burnout',
+        message: `🔥 A wire melted — ${formatValue(i, 'A')} through ${gaugeLabel(gauge)} wire rated for about ${formatValue(rating, 'A')}. Use thicker wire (a smaller AWG number) or reduce the current.`
+      })
+    }
+  }
   for (const c of components) {
     const prof = THERMAL_PROFILES[c.type]
     if (!prof) continue

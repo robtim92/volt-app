@@ -32,7 +32,7 @@ describe('lesson circuits survive the heat model', () => {
       const failures: string[] = []
       for (let k = 0; k < 100; k++) {
         const snap = sim.advance(0.05, maxStep, 100000)
-        const r = stepThermal(preset.components, { ...snap, terminalNodes: built.terminalNodes }, heat, 0.05)
+        const r = stepThermal(preset.components, { ...snap, terminalNodes: built.terminalNodes }, heat, 0.05, preset.wires)
         heat = r.heat
         failures.push(...r.events.map((e) => e.message))
       }

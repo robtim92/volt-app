@@ -15,6 +15,7 @@ export const GRID = 20
 export type ComponentType =
   | 'resistor' | 'capacitor' | 'inductor'
   | 'voltage_source' | 'current_source' | 'ac_voltage_source' | 'transformer'
+  | 'battery' | 'bench_supply'
   | 'diode' | 'led' | 'transistor_npn'
   | 'switch' | 'breaker' | 'gfci' | 'ground' | 'wire_node'
   | 'voltmeter' | 'ammeter'
@@ -32,6 +33,10 @@ export interface CircuitComponent {
   phase?: number     // ac_voltage_source only: phase in degrees (default 0)
   rating?: number    // thermal/safety rating override: resistor W, LED/diode A, capacitor V
   damaged?: boolean  // burnt out by overheating (acts as an open circuit until repaired)
+  chemistry?: import('./battery').Chemistry // battery only
+  cells?: number      // battery only: cells in series
+  soc?: number        // battery only: starting state of charge 0..1 (default 1)
+  currentLimit?: number // bench_supply only: current limit (A)
 }
 
 export interface Wire {
@@ -40,6 +45,12 @@ export interface Wire {
   fromTerminal: number
   toComponentId: string
   toTerminal: number
+  /** American Wire Gauge (default 22, hookup wire) */
+  gauge?: number
+  /** metres; undefined = measured from the drawing (1 grid square = 1 cm) */
+  length?: number
+  /** melted by overcurrent: an open circuit until repaired */
+  damaged?: boolean
 }
 
 export interface TerminalDef {
@@ -95,6 +106,24 @@ export const ELEMENTS: Record<ComponentType, ElementDef> = {
     labelPrefix: 'V',
     terminals: [{ x: -2 * GRID, y: 0, name: '+' }, { x: 2 * GRID, y: 0, name: '−' }],
     defaultValue: 5,
+    unit: 'V',
+    inPalette: true
+  },
+  battery: {
+    type: 'battery',
+    displayName: 'Battery',
+    labelPrefix: 'B',
+    terminals: [{ x: -2 * GRID, y: 0, name: '+' }, { x: 2 * GRID, y: 0, name: '−' }],
+    defaultValue: null, // voltage comes from chemistry × cells × state of charge
+    unit: 'V',
+    inPalette: true
+  },
+  bench_supply: {
+    type: 'bench_supply',
+    displayName: 'Bench Supply',
+    labelPrefix: 'PS',
+    terminals: [{ x: -2 * GRID, y: 0, name: '+' }, { x: 2 * GRID, y: 0, name: '−' }],
+    defaultValue: 12, // voltage setpoint; current limit lives on the component
     unit: 'V',
     inPalette: true
   },

@@ -43,6 +43,8 @@ export type TransientElementType =
   | 'sine_source'
   | 'current_source'
   | 'diode'
+  /** bench supply: a voltage source (value) that becomes a current source at `limit` */
+  | 'supply'
 
 export interface TransientElement {
   id: string
@@ -57,6 +59,8 @@ export interface TransientElement {
   phaseDeg?: number
   /** diode only */
   params?: DiodeParams
+  /** supply only: current limit (A) */
+  limit?: number
 }
 
 export interface TransientNetlist {
@@ -76,6 +80,8 @@ export interface TransientState {
   indVoltage: Record<string, number>
   /** diode id → junction voltage (NR seed) */
   junction: Record<string, number>
+  /** supply id → true while current-limited (constant-current mode) */
+  cc?: Record<string, boolean>
 }
 
 export interface TransientEvent {
@@ -116,7 +122,8 @@ export const emptyTransientState = (): TransientState => ({
   capCurrent: {},
   indCurrent: {},
   indVoltage: {},
-  junction: {}
+  junction: {},
+  cc: {}
 })
 
 /** Node-to-ground leakage that keeps floating nodes solvable (1 GΩ). */
@@ -146,7 +153,7 @@ function validate(netlist: TransientNetlist): string | null {
   return null
 }
 
-const sourceVoltage = (el: TransientElement, t: number): number =>
+const sourceVoltage = (el: TransientElement, t: number): number => // supply (CV) uses its setpoint
   el.type === 'sine_source'
     ? el.value * Math.sin(2 * Math.PI * (el.frequency ?? 60) * t + ((el.phaseDeg ?? 0) * Math.PI) / 180)
     : el.value
@@ -179,11 +186,7 @@ export class TransientSimulator {
         if (n !== GROUND && !this.nodeIndex.has(n)) this.nodeIndex.set(n, this.nodeIndex.size)
       }
     }
-    this.vsources = netlist.elements.filter(
-      (e) => e.type === 'voltage_source' || e.type === 'sine_source'
-    )
-    this.size = this.nodeIndex.size + this.vsources.length
-    this.x = new Array<number>(this.size).fill(0)
+    this.layout()
     this.lastSnapshot = {
       solved: false,
       time: this.state.time,
@@ -197,6 +200,62 @@ export class TransientSimulator {
     return this.state.time
   }
 
+  /** (Re)compute which elements need a branch-current row in the matrix. */
+  private layout(): void {
+    const cc = this.state.cc ?? {}
+    this.vsources = this.netlist.elements.filter(
+      (e) =>
+        e.type === 'voltage_source' || e.type === 'sine_source' || (e.type === 'supply' && !cc[e.id])
+    )
+    this.size = this.nodeIndex.size + this.vsources.length
+    this.x = new Array<number>(this.size).fill(0)
+  }
+
+  /** Change a source's voltage in place (a battery's voltage falls as it drains). */
+  setSourceValue(id: string, value: number): void {
+    const el = this.netlist.elements.find((e) => e.id === id)
+    if (el) el.value = value
+  }
+
+  /** A bench supply's regulation mode. */
+  supplyMode(id: string): 'CV' | 'CC' {
+    return this.state.cc?.[id] ? 'CC' : 'CV'
+  }
+
+  /**
+   * Bench supplies regulate voltage until their current limit is reached, then
+   * regulate current (and back again when the load lightens). Returns true if
+   * any supply changed mode (the matrix structure changes).
+   */
+  private updateSupplyModes(): boolean {
+    const cc = (this.state.cc ??= {})
+    let changed = false
+    const numNodes = this.nodeIndex.size
+    for (const el of this.netlist.elements) {
+      if (el.type !== 'supply') continue
+      const limit = el.limit ?? Infinity
+      if (!cc[el.id]) {
+        const row = this.vsources.indexOf(el)
+        const delivered = row >= 0 ? -this.x[numNodes + row] : 0
+        if (delivered > limit * 1.0005) {
+          cc[el.id] = true
+          changed = true
+        }
+      } else if (this.v(el.nodes[0]) - this.v(el.nodes[1]) > el.value) {
+        cc[el.id] = false
+        changed = true
+      }
+    }
+    if (changed) {
+      const saved = this.x
+      this.layout()
+      // keep node voltages as the starting point
+      for (let k = 0; k < Math.min(this.nodeIndex.size, saved.length); k++) this.x[k] = saved[k]
+      this.firstStep = true
+    }
+    return changed
+  }
+
   snapshot(): TransientSnapshot {
     return this.lastSnapshot
   }
@@ -208,10 +267,14 @@ export class TransientSimulator {
   settleInstant(): TransientSnapshot {
     if (this.error) return this.lastSnapshot
     const saved = cloneState(this.state)
-    const ok = this.step(1e-9, true)
+    let ok = this.step(1e-9, true)
+    for (let pass = 0; ok && pass < 3 && this.updateSupplyModes(); pass++) ok = this.step(1e-9, true)
+    const cc = { ...(this.state.cc ?? {}) }
     const snap = ok ? this.buildSnapshot(1e-9, true) : this.failSnapshot()
     // Restore — an instantaneous solve must not change the stored history
+    // (the supply regulation mode is a property of the circuit, so it stays)
     this.state = saved
+    this.state.cc = cc
     this.state.junction = { ...this.state.junction }
     this.lastSnapshot = { ...snap, time: this.state.time }
     return this.lastSnapshot
@@ -246,15 +309,24 @@ export class TransientSimulator {
     // resolve them with one tiny backward-Euler step first.
     if (this.firstStep && this.opts.backwardEuler !== true) {
       const micro = Math.min(dt / 1000, 1e-7)
-      if (!this.step(micro, true)) {
+      let okMicro = this.step(micro, true)
+      for (let r = 0; okMicro && r < 2 && this.updateSupplyModes(); r++) okMicro = this.step(micro, true)
+      if (!okMicro) {
         this.lastSnapshot = this.failSnapshot()
         return this.lastSnapshot
       }
       this.commit(micro, true)
     }
     for (let k = 0; k < n; k++) {
-      const be = this.opts.backwardEuler === true || this.firstStep
-      if (!this.step(dt, be)) {
+      let be = this.opts.backwardEuler === true || this.firstStep
+      let ok = this.step(dt, be)
+      // A supply that hit its limit regulates within microseconds: re-solve
+      // this step in the new mode instead of accepting the overshoot.
+      for (let r = 0; ok && r < 2 && this.updateSupplyModes(); r++) {
+        be = true
+        ok = this.step(dt, be)
+      }
+      if (!ok) {
         this.lastSnapshot = this.failSnapshot()
         return this.lastSnapshot
       }
@@ -336,6 +408,9 @@ export class TransientSimulator {
           case 'current_source':
             // pushes current out of nodes[0] into the circuit → flows b→a internally
             flow(ib, ia, el.value)
+            break
+          case 'supply':
+            if (st.cc?.[el.id]) flow(ib, ia, el.limit ?? 0)
             break
           case 'capacitor': {
             const v0 = st.capVoltage[el.id] ?? 0
@@ -466,6 +541,9 @@ export class TransientSimulator {
         case 'current_source':
           elementCurrents[el.id] = -el.value
           break
+        case 'supply':
+          if (st.cc?.[el.id]) elementCurrents[el.id] = -(el.limit ?? 0)
+          break
         case 'capacitor': {
           if (be) {
             // instantaneous solve: current implied by the tiny step
@@ -501,7 +579,8 @@ function cloneState(s: TransientState): TransientState {
     capCurrent: { ...s.capCurrent },
     indCurrent: { ...s.indCurrent },
     indVoltage: { ...s.indVoltage },
-    junction: { ...s.junction }
+    junction: { ...s.junction },
+    cc: { ...(s.cc ?? {}) }
   }
 }
 
@@ -520,6 +599,8 @@ function carryState(netlist: TransientNetlist, prev?: TransientState): Transient
       next.indVoltage[el.id] = 0
     } else if (el.type === 'diode' && prev.junction[el.id] !== undefined) {
       next.junction[el.id] = prev.junction[el.id]
+    } else if (el.type === 'supply' && prev.cc?.[el.id]) {
+      next.cc![el.id] = true
     }
   }
   return next

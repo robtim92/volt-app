@@ -18,10 +18,11 @@
 import { useEffect, useRef } from 'react'
 import { useCircuitStore, type SimulationResult } from '@stores/circuitStore'
 import { liveFrame, useLiveSimStore, HISTORY_SECONDS_MAX } from '@stores/liveSimStore'
-import { buildTransientNetlist, usesPhasorAnalysis } from '../sim/netlist'
+import { batteryParams, buildTransientNetlist, usesPhasorAnalysis } from '../sim/netlist'
+import { drain, packOcv } from '../sim/battery'
 import { TransientSimulator, suggestMaxStep } from '../sim/transient'
 import { stepThermal } from '../sim/thermal'
-import type { CircuitComponent } from '../sim/elements'
+import type { CircuitComponent, Wire } from '../sim/elements'
 
 const PUBLISH_INTERVAL_MS = 66
 const MAX_FRAME_SECONDS = 0.1
@@ -69,7 +70,8 @@ export function useLiveSimulation(): void {
     maxStep: number
     ownsResult: boolean
     components: CircuitComponent[]
-  }>({ terminalNodes: {}, warnings: [], maxStep: 1e-3, ownsResult: true, components: [] })
+    wires: Wire[]
+  }>({ terminalNodes: {}, warnings: [], maxStep: 1e-3, ownsResult: true, components: [], wires: [] })
   const lastPublishRef = useRef(0)
 
   const publish = (force = false): void => {
@@ -91,8 +93,11 @@ export function useLiveSimulation(): void {
     liveFrame.heat = {}
     liveFrame.history = []
     liveFrame.time = 0
-    const { components: comps, updateComponent } = useCircuitStore.getState()
+    liveFrame.soc = {}
+    liveFrame.supplyMode = {}
+    const { components: comps, wires: ws, updateComponent, updateWire } = useCircuitStore.getState()
     for (const c of comps) if (c.damaged) updateComponent(c.id, { damaged: false })
+    for (const w of ws) if (w.damaged) updateWire(w.id, { damaged: false })
     useLiveSimStore.getState().setClock(0, 1)
   }, [resetToken])
 
@@ -104,7 +109,10 @@ export function useLiveSimulation(): void {
       liveFrame.history = []
       return
     }
-    const built = buildTransientNetlist(components, wires)
+    for (const c of components) {
+      if (c.type === 'battery' && liveFrame.soc[c.id] === undefined) liveFrame.soc[c.id] = c.soc ?? 1
+    }
+    const built = buildTransientNetlist(components, wires, { soc: liveFrame.soc })
     const sim = new TransientSimulator(built.netlist, simRef.current?.state)
     simRef.current = sim
     metaRef.current = {
@@ -112,7 +120,8 @@ export function useLiveSimulation(): void {
       warnings: built.warnings,
       maxStep: suggestMaxStep(built.netlist),
       ownsResult: !usesPhasorAnalysis(components),
-      components
+      components,
+      wires
     }
     // Immediate solve so readouts update without waiting for a frame
     const snap = sim.settleInstant()
@@ -157,18 +166,37 @@ export function useLiveSimulation(): void {
           live.pushEffect({ componentId: ev.elementId, kind: 'arc' })
         }
 
+        // Batteries drain; their voltage follows their state of charge
+        if (snap.solved && advanced > 0) {
+          for (const c of meta.components) {
+            if (c.type !== 'battery' || c.damaged) continue
+            const p = batteryParams(c, liveFrame.soc)
+            const delivered = -(snap.elementCurrents[c.id] ?? 0)
+            liveFrame.soc[c.id] = drain(p, delivered, advanced)
+            sim.setSourceValue(c.id, packOcv({ ...p, soc: liveFrame.soc[c.id] }))
+          }
+          for (const c of meta.components) {
+            if (c.type === 'bench_supply') liveFrame.supplyMode[c.id] = sim.supplyMode(c.id)
+          }
+        }
+
         // Heat & damage
         if (snap.solved && advanced > 0) {
           const res = stepThermal(
             meta.components,
             { ...snap, terminalNodes: meta.terminalNodes },
             liveFrame.heat,
-            advanced
+            advanced,
+            meta.wires
           )
           liveFrame.heat = res.heat
           if (res.events.length > 0) {
-            const { updateComponent } = useCircuitStore.getState()
+            const { updateComponent, updateWire } = useCircuitStore.getState()
+            const wireIds = new Set(meta.wires.map((w) => w.id))
             // Apply locally too, so the next frame doesn't re-fire before React rebuilds
+            meta.wires = meta.wires.map((w) =>
+              res.events.some((e) => e.componentId === w.id) ? { ...w, damaged: true } : w
+            )
             meta.components = meta.components.map((c) => {
               const ev = res.events.find((e) => e.componentId === c.id)
               if (!ev) return c
@@ -176,7 +204,8 @@ export function useLiveSimulation(): void {
             })
             for (const ev of res.events) {
               live.pushEffect({ componentId: ev.componentId, kind: ev.kind, message: ev.message })
-              if (ev.kind === 'trip') updateComponent(ev.componentId, { closed: false })
+              if (wireIds.has(ev.componentId)) updateWire(ev.componentId, { damaged: true })
+              else if (ev.kind === 'trip') updateComponent(ev.componentId, { closed: false })
               else updateComponent(ev.componentId, { damaged: true })
             }
           }

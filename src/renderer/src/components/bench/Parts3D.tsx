@@ -208,6 +208,109 @@ function Battery({ c }: { c: CircuitComponent }): JSX.Element {
   )
 }
 
+function CellsPack({ c }: { c: CircuitComponent }): JSX.Element {
+  const chem = c.chemistry ?? 'alkaline_9v'
+  if (chem === 'alkaline_9v') return <Battery c={c} />
+  const bodyMat = useHeatMaterial(c, chem === 'leadacid' ? '#2b2b2b' : chem === 'lifepo4' ? '#1e3a8a' : chem === 'liion' ? '#0e7490' : '#c2410c')
+  if (chem === 'leadacid' || chem === 'lifepo4') {
+    // block battery with two posts
+    return (
+      <group>
+        <mesh position={[0, 0.35, 0]} castShadow>
+          <boxGeometry args={[1.5, 0.7, 0.9]} />
+          <meshStandardMaterial ref={bodyMat} color="#2b2b2b" roughness={0.6} />
+        </mesh>
+        <mesh position={[-0.5, 0.75, 0]}>
+          <cylinderGeometry args={[0.08, 0.08, 0.12, 16]} />
+          <meshStandardMaterial color="#b91c1c" metalness={0.6} roughness={0.4} />
+        </mesh>
+        <mesh position={[0.5, 0.75, 0]}>
+          <cylinderGeometry args={[0.08, 0.08, 0.12, 16]} />
+          <meshStandardMaterial color="#111" metalness={0.6} roughness={0.4} />
+        </mesh>
+        <Lead from={[-0.5, 0.8, 0]} to={[-1, LEAD_HEIGHT, 0]} />
+        <Lead from={[0.5, 0.8, 0]} to={[1, LEAD_HEIGHT, 0]} />
+      </group>
+    )
+  }
+  // cylindrical cells in a holder (AA / 18650), up to four drawn
+  const n = Math.min(4, Math.max(1, c.cells ?? (chem === 'alkaline_aa' ? 2 : 1)))
+  const len = chem === 'liion' ? 0.9 : 0.75
+  return (
+    <group>
+      <mesh position={[0, 0.06, 0]} castShadow>
+        <boxGeometry args={[len + 0.25, 0.12, 0.28 * n + 0.1]} />
+        <meshStandardMaterial color="#1f2937" roughness={0.7} />
+      </mesh>
+      {Array.from({ length: n }, (_, k) => (
+        <group key={k} position={[0, 0.22, (k - (n - 1) / 2) * 0.28]}>
+          <mesh rotation={[0, 0, Math.PI / 2]} castShadow>
+            <cylinderGeometry args={[0.12, 0.12, len, 20]} />
+            <meshStandardMaterial ref={k === 0 ? bodyMat : undefined} color={chem === 'liion' ? '#0e7490' : '#c2410c'} roughness={0.4} />
+          </mesh>
+          <mesh position={[-len / 2 - 0.02, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[0.05, 0.05, 0.04, 12]} />
+            <meshStandardMaterial {...METAL} />
+          </mesh>
+        </group>
+      ))}
+      <Lead from={[-len / 2 - 0.1, 0.12, 0]} to={[-1, LEAD_HEIGHT, 0]} />
+      <Lead from={[len / 2 + 0.1, 0.12, 0]} to={[1, LEAD_HEIGHT, 0]} />
+    </group>
+  )
+}
+
+function BenchSupply({ c }: { c: CircuitComponent }): JSX.Element {
+  const textRef = useRef<HTMLSpanElement>(null)
+  const ledRef = useRef<THREE.MeshStandardMaterial>(null)
+  useFrame(() => {
+    const r = displayResult()
+    const mode = liveFrame.supplyMode[c.id] ?? 'CV'
+    if (ledRef.current) ledRef.current.color.set(mode === 'CC' ? '#ef4444' : '#22c55e')
+    if (ledRef.current) ledRef.current.emissive.set(mode === 'CC' ? '#ef4444' : '#22c55e')
+    const el = textRef.current
+    if (!el) return
+    if (!r?.solved) {
+      el.textContent = '--.-- V  -.--- A'
+      return
+    }
+    const va = r.nodeVoltages[r.terminalNodes[terminalKey(c.id, 0)]] ?? 0
+    const vb = r.nodeVoltages[r.terminalNodes[terminalKey(c.id, 1)]] ?? 0
+    el.textContent = `${(va - vb).toFixed(2)} V  ${Math.abs(currentOf(r, c.id)).toFixed(3)} A`
+  })
+  return (
+    <group>
+      <mesh position={[0, 0.35, 0]} castShadow>
+        <boxGeometry args={[1.5, 0.7, 0.9]} />
+        <meshStandardMaterial color="#334155" roughness={0.5} />
+      </mesh>
+      <mesh position={[0, 0.42, 0.451]}>
+        <planeGeometry args={[1.0, 0.24]} />
+        <meshStandardMaterial color="#04140a" />
+      </mesh>
+      <Html position={[0, 0.42, 0.46]} transform scale={0.1} occlude={false} zIndexRange={[10, 0]}>
+        <span ref={textRef} style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 22, color: '#4ade80', whiteSpace: 'pre' }}>
+          --.-- V
+        </span>
+      </Html>
+      <mesh position={[0.6, 0.18, 0.46]}>
+        <sphereGeometry args={[0.04, 12, 8]} />
+        <meshStandardMaterial ref={ledRef} color="#22c55e" emissive="#22c55e" emissiveIntensity={2} toneMapped={false} />
+      </mesh>
+      <mesh position={[-0.45, 0.15, 0.46]}>
+        <cylinderGeometry args={[0.05, 0.05, 0.06, 12]} />
+        <meshStandardMaterial color="#b91c1c" />
+      </mesh>
+      <mesh position={[-0.25, 0.15, 0.46]}>
+        <cylinderGeometry args={[0.05, 0.05, 0.06, 12]} />
+        <meshStandardMaterial color="#111" />
+      </mesh>
+      <Lead from={[-0.75, 0.15, 0]} to={[-1, LEAD_HEIGHT, 0]} />
+      <Lead from={[0.75, 0.15, 0]} to={[1, LEAD_HEIGHT, 0]} />
+    </group>
+  )
+}
+
 function SignalGenerator(): JSX.Element {
   return (
     <group>
@@ -480,6 +583,8 @@ function Model({ c }: { c: CircuitComponent }): JSX.Element | null {
     case 'capacitor': return <Capacitor c={c} />
     case 'inductor': return <Inductor c={c} />
     case 'voltage_source': return <Battery c={c} />
+    case 'battery': return <CellsPack c={c} />
+    case 'bench_supply': return <BenchSupply c={c} />
     case 'ac_voltage_source': return <SignalGenerator />
     case 'current_source': return <CurrentSource />
     case 'led': return <Led c={c} />
