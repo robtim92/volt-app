@@ -172,13 +172,20 @@ function NeedsReviewSection(): JSX.Element | null {
 
 // ── DC track section ─────────────────────────────────────────────────────────
 
-function DCTrackSection(): JSX.Element {
+function TrackSection({
+  track,
+  title
+}: {
+  track: 'dc' | 'ac' | 'digital'
+  title: string
+}): JSX.Element | null {
   const progress = useLessonStore((s) => s.progress)
   const setActiveLesson = useLessonStore((s) => s.setActiveLesson)
   const setActivePanel = useUIStore((s) => s.setActivePanel)
 
-  const dcLessons = getLessonsForTrack('dc')
-  const dcModules = getModulesForTrack('dc')
+  const dcLessons = getLessonsForTrack(track)
+  const dcModules = getModulesForTrack(track)
+  if (dcLessons.length === 0) return null
 
   const completedLessons = dcLessons.filter((l) => progress[l.id]?.completed)
   const scores = completedLessons
@@ -196,7 +203,7 @@ function DCTrackSection(): JSX.Element {
     <div className="mb-10">
       {/* Track header */}
       <div className="flex items-center justify-between mb-2">
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white">DC Circuits</h2>
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white">{title}</h2>
         <span className="text-sm text-gray-500 dark:text-gray-400">
           {completedLessons.length} / {dcLessons.length} lessons
         </span>
@@ -321,9 +328,9 @@ export default function DashboardPanel(): JSX.Element {
 
         <NeedsReviewSection />
 
-        <DCTrackSection />
+        <TrackSection track="dc" title="DC Circuits" />
+        <TrackSection track="ac" title="AC & Residential" />
 
-        <ComingSoonTrack title="AC & Residential" phase={4} />
         <ComingSoonTrack title="Digital Computing" phase={5} />
       </div>
     </div>

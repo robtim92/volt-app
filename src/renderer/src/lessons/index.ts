@@ -1,10 +1,11 @@
 import type { Lesson, TrackId } from './types'
 import { DC_LESSONS } from './dcLessons'
+import { AC_LESSONS } from './acLessons'
 
 export type { Lesson, LessonCard, ConceptCard, QuizCard, CircuitPreset, TrackId } from './types'
 
 /** All lessons, in curriculum order per track. */
-export const ALL_LESSONS: Lesson[] = [...DC_LESSONS]
+export const ALL_LESSONS: Lesson[] = [...DC_LESSONS, ...AC_LESSONS]
 
 export function getLessonsForTrack(track: TrackId): Lesson[] {
   return ALL_LESSONS.filter((l) => l.track === track)

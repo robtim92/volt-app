@@ -14,6 +14,20 @@ import { useCircuitStore } from '@stores/circuitStore'
 import { getLesson, getModulesForTrack, type Lesson, type LessonCard } from '../../lessons'
 import type { CircuitPreset, CircuitQuizCard } from '../../lessons/types'
 
+const TRACK_META: Record<'dc' | 'ac' | 'digital', { title: string; subtitle: string }> = {
+  dc: {
+    title: 'DC Circuits',
+    subtitle:
+      'From "what is a volt?" to building real circuits — every lesson pairs theory with the live simulator.'
+  },
+  ac: {
+    title: 'AC & Residential',
+    subtitle:
+      'Alternating current, reactance, filters, transformers and residential wiring — with the scope to see it.'
+  },
+  digital: { title: 'Digital Computing', subtitle: 'Logic and CPUs — coming in Phase 5.' }
+}
+
 // ── List view ────────────────────────────────────────────────────────────────
 
 function LessonList(): JSX.Element {
@@ -22,6 +36,7 @@ function LessonList(): JSX.Element {
   const setActiveLesson = useLessonStore((s) => s.setActiveLesson)
 
   const modules = getModulesForTrack(activeTrack)
+  const trackMeta = TRACK_META[activeTrack]
 
   if (modules.length === 0) {
     return (
@@ -42,11 +57,10 @@ function LessonList(): JSX.Element {
   return (
     <div className="h-full overflow-y-auto">
       <div className="max-w-2xl mx-auto px-6 py-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">DC Circuits</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-8">
-          From "what is a volt?" to building real circuits — every lesson pairs theory with the
-          live simulator.
-        </p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
+          {trackMeta.title}
+        </h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-8">{trackMeta.subtitle}</p>
 
         {modules.map(({ module, lessons }) => (
           <div key={module} className="mb-8">

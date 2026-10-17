@@ -24,7 +24,7 @@ describe('LessonsPanel — list view', () => {
   })
 
   it('shows a coming-soon state for tracks without content', () => {
-    useUIStore.setState({ activeTrack: 'ac' })
+    useUIStore.setState({ activeTrack: 'digital' })
     render(<LessonsPanel />)
     expect(screen.getByText(/coming soon/i)).toBeInTheDocument()
   })

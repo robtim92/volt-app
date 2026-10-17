@@ -5,8 +5,9 @@
  */
 import { describe, it, expect } from 'vitest'
 import { ALL_LESSONS, getLessonsForTrack, getModulesForTrack, getLesson } from './index'
-import { buildNetlist } from '../sim/netlist'
+import { buildNetlist, buildACNetlist } from '../sim/netlist'
 import { solveDC } from '../sim/solver'
+import { solveAC } from '../sim/acSolver'
 
 describe('lesson content integrity', () => {
   it('has unique lesson ids', () => {
@@ -46,13 +47,26 @@ describe('lesson content integrity', () => {
     for (const lesson of ALL_LESSONS) {
       for (const card of lesson.cards) {
         if (card.type !== 'concept' || !card.circuit) continue
-        const { netlist, warnings } = buildNetlist(
-          card.circuit.components,
-          card.circuit.wires
-        )
-        expect(warnings, `${lesson.id}: preset warnings`).toEqual([])
-        const result = solveDC(netlist)
-        expect(result.solved, `${lesson.id}: ${result.error ?? ''}`).toBe(true)
+        const acSource = card.circuit.components.find((c) => c.type === 'ac_voltage_source')
+        if (acSource) {
+          // AC preset → validate in the phasor solver at the source frequency
+          const { netlist, warnings } = buildACNetlist(
+            card.circuit.components,
+            card.circuit.wires
+          )
+          expect(warnings, `${lesson.id}: AC preset warnings`).toEqual([])
+          const omega = 2 * Math.PI * (acSource.frequency ?? 60)
+          const result = solveAC(netlist, omega)
+          expect(result.solved, `${lesson.id}: ${result.error ?? ''}`).toBe(true)
+        } else {
+          const { netlist, warnings } = buildNetlist(
+            card.circuit.components,
+            card.circuit.wires
+          )
+          expect(warnings, `${lesson.id}: preset warnings`).toEqual([])
+          const result = solveDC(netlist)
+          expect(result.solved, `${lesson.id}: ${result.error ?? ''}`).toBe(true)
+        }
       }
     }
   })
@@ -81,8 +95,8 @@ describe('lesson lookup helpers', () => {
     expect(modules[0].module).toBe('Fundamentals')
   })
 
-  it('returns empty for tracks without content yet', () => {
-    expect(getLessonsForTrack('ac')).toEqual([])
+  it('has AC content and no digital content yet', () => {
+    expect(getLessonsForTrack('ac').length).toBeGreaterThan(0)
     expect(getLessonsForTrack('digital')).toEqual([])
   })
 
