@@ -309,6 +309,8 @@ export default function CircuitCanvas({
   const panRef = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null)
   const wireStartRef = useRef<TerminalHit | null>(null)
   const viewRef = useRef({ ox: 0, oy: 0, scale: 1 })
+  // Dev-only handle so end-to-end tests can aim touches at terminals
+  if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__voltView = viewRef
   const pendingRef = useRef<ComponentType | null>(pendingType)
   pendingRef.current = pendingType
 
@@ -362,6 +364,11 @@ export default function CircuitCanvas({
   }
 
   // ── Hit testing against current store state (world coords) ──
+  /** Touch needs bigger targets than a mouse pointer (in screen px, converted to world). */
+  const touchRef = useRef(false)
+  const hitRadius = (mousePx: number, touchPx: number): number =>
+    touchRef.current ? Math.max(mousePx, touchPx / viewRef.current.scale) : mousePx
+
   const findTerminal = (x: number, y: number): TerminalHit | null => {
     const { components } = useCircuitStore.getState()
     for (let i = components.length - 1; i >= 0; i--) {
@@ -369,7 +376,7 @@ export default function CircuitCanvas({
       const def = ELEMENTS[c.type]
       for (let t = 0; t < def.terminals.length; t++) {
         const p = terminalPosition(c, t)
-        if (Math.hypot(p.x - x, p.y - y) <= TERMINAL_HIT_RADIUS) {
+        if (Math.hypot(p.x - x, p.y - y) <= hitRadius(TERMINAL_HIT_RADIUS, 22)) {
           return { componentId: c.id, terminal: t, x: p.x, y: p.y }
         }
       }
@@ -396,12 +403,110 @@ export default function CircuitCanvas({
       if (!from || !to) continue
       const a = terminalPosition(from, w.fromTerminal)
       const b = terminalPosition(to, w.toTerminal)
-      if (distToSegment(x, y, a.x, a.y, b.x, b.y) < 6) return w
+      if (distToSegment(x, y, a.x, a.y, b.x, b.y) < hitRadius(6, 14)) return w
     }
     return null
   }
 
-  // ── Mouse interaction ──
+  // ── Pointer interaction (mouse, pen and touch) ──
+  const pointersRef = useRef(new Map<number, { x: number; y: number }>())
+  const pinchRef = useRef<{ dist: number; mx: number; my: number } | null>(null)
+  const lastTapRef = useRef<{ id: string; t: number } | null>(null)
+  const tapRef = useRef<{ x: number; y: number; moved: boolean } | null>(null)
+
+  const screenPoint = (e: { clientX: number; clientY: number }): { x: number; y: number } => {
+    const rect = canvasRef.current!.getBoundingClientRect()
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top }
+  }
+
+  const cancelGestures = (): void => {
+    dragRef.current = null
+    wireStartRef.current = null
+    marqueeRef.current = null
+    panRef.current = null
+  }
+
+  const handlePointerDown = (e: React.PointerEvent): void => {
+    touchRef.current = e.pointerType === 'touch'
+    pointersRef.current.set(e.pointerId, screenPoint(e))
+    try {
+      canvasRef.current?.setPointerCapture(e.pointerId)
+    } catch {
+      /* not capturable (synthetic event) */
+    }
+    if (pointersRef.current.size === 2) {
+      // Second finger: switch to pinch-zoom, abandon whatever the first started
+      cancelGestures()
+      const [a, b] = [...pointersRef.current.values()]
+      pinchRef.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 }
+      return
+    }
+    if (pointersRef.current.size > 2) return
+    tapRef.current = { ...screenPoint(e), moved: false }
+    handleMouseDown(e)
+  }
+
+  const handlePointerMove = (e: React.PointerEvent): void => {
+    if (pointersRef.current.has(e.pointerId)) pointersRef.current.set(e.pointerId, screenPoint(e))
+    const tap = tapRef.current
+    if (tap) {
+      const p = screenPoint(e)
+      if (Math.hypot(p.x - tap.x, p.y - tap.y) > 8) tap.moved = true
+    }
+    const pinch = pinchRef.current
+    if (pinch && pointersRef.current.size >= 2) {
+      const [a, b] = [...pointersRef.current.values()]
+      const dist = Math.hypot(a.x - b.x, a.y - b.y)
+      const mx = (a.x + b.x) / 2
+      const my = (a.y + b.y) / 2
+      const v = viewRef.current
+      const newScale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, v.scale * (dist / Math.max(1, pinch.dist))))
+      // keep the world point under the previous midpoint under the new midpoint
+      const wx = (pinch.mx - v.ox) / v.scale
+      const wy = (pinch.my - v.oy) / v.scale
+      v.scale = newScale
+      v.ox = mx - wx * newScale
+      v.oy = my - wy * newScale
+      pinchRef.current = { dist, mx, my }
+      return
+    }
+    handleMouseMove(e)
+  }
+
+  const handlePointerUp = (e: React.PointerEvent): void => {
+    pointersRef.current.delete(e.pointerId)
+    if (pinchRef.current) {
+      if (pointersRef.current.size < 2) pinchRef.current = null
+      return
+    }
+    handleMouseUp(e)
+    // Double-tap a switch / breaker / GFCI to flip it (touch has no dblclick)
+    const tap = tapRef.current
+    tapRef.current = null
+    if (e.pointerType === 'touch') {
+      mouseRef.current.inside = false
+      if (tap && !tap.moved) {
+        const { x, y } = canvasPoint(e)
+        const comp = findComponent(x, y)
+        const now = performance.now()
+        if (comp && lastTapRef.current?.id === comp.id && now - lastTapRef.current.t < 350) {
+          if (comp.type === 'switch' || comp.type === 'breaker' || comp.type === 'gfci')
+            useCircuitStore.getState().toggleSwitch(comp.id)
+          lastTapRef.current = null
+        } else {
+          lastTapRef.current = comp ? { id: comp.id, t: now } : null
+        }
+      }
+    }
+  }
+
+  const handlePointerCancel = (e: React.PointerEvent): void => {
+    pointersRef.current.delete(e.pointerId)
+    pinchRef.current = null
+    tapRef.current = null
+    cancelGestures()
+  }
+
   const handleMouseDown = (e: React.MouseEvent): void => {
     // middle button or Alt+left → pan
     if (e.button === 1 || (e.button === 0 && e.altKey)) {
@@ -475,8 +580,13 @@ export default function CircuitCanvas({
       return
     }
 
-    // Empty canvas → clear selection and begin a marquee.
+    // Empty canvas → clear selection; drag pans on touch, draws a marquee with a mouse.
     store.clearSelection()
+    if (touchRef.current) {
+      const p = screenPoint(e)
+      panRef.current = { startX: p.x, startY: p.y, ox: viewRef.current.ox, oy: viewRef.current.oy }
+      return
+    }
     marqueeRef.current = { x0: x, y0: y, x1: x, y1: y }
   }
 
@@ -999,7 +1109,7 @@ export default function CircuitCanvas({
         ctx.font = '11px Inter, system-ui, sans-serif'
         ctx.fillStyle = labelColor
         ctx.textAlign = 'right'
-        ctx.fillText(`${Math.round(view.scale * 100)}% (press 0 to reset)`, w - 10, h - 10)
+        ctx.fillText(`${Math.round(view.scale * 100)}%`, w - 10, h - 10)
       }
 
       raf = requestAnimationFrame(draw)
@@ -1015,21 +1125,32 @@ export default function CircuitCanvas({
   }, [canvasElRef])
 
   return (
+    <>
+    <button
+      onClick={fitView}
+      title="Fit the circuit to the view (F)"
+      aria-label="Fit circuit to view"
+      className="absolute top-2 right-2 z-10 px-2 py-1 text-xs rounded bg-gray-200/90 dark:bg-white/10 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-white/20"
+    >
+      ⤢ Fit
+    </button>
     <canvas
       ref={canvasRef}
       data-testid="circuit-canvas"
-      className="w-full h-full block cursor-crosshair"
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={() => {
+      className="w-full h-full block cursor-crosshair touch-none select-none"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
+      onPointerLeave={(e) => {
         mouseRef.current.inside = false
-        dragRef.current = null
-        panRef.current = null
-        marqueeRef.current = null
+        // With pointer capture a drag keeps going outside the canvas; only an
+        // uncaptured mouse hover ends here.
+        if (e.pointerType === 'mouse' && e.buttons === 0) cancelGestures()
       }}
       onDoubleClick={handleDoubleClick}
       onContextMenu={handleContextMenu}
     />
+    </>
   )
 }

@@ -5,6 +5,8 @@ interface PaletteProps {
   onPick: (type: ComponentType | null) => void
   /** If set, only these component types are shown. */
   allowedTypes?: ComponentType[]
+  /** Phone layout: a horizontal, swipeable strip instead of a sidebar. */
+  horizontal?: boolean
 }
 
 const PALETTE_ICONS: Partial<Record<ComponentType, string>> = {
@@ -24,10 +26,39 @@ const PALETTE_ICONS: Partial<Record<ComponentType, string>> = {
   wire_node: '•'
 }
 
-export default function Palette({ pendingType, onPick, allowedTypes }: PaletteProps): JSX.Element {
+export default function Palette({ pendingType, onPick, allowedTypes, horizontal = false }: PaletteProps): JSX.Element {
   const entries = Object.values(ELEMENTS).filter(
     (d) => d.inPalette && (!allowedTypes || allowedTypes.includes(d.type))
   )
+
+  if (horizontal) {
+    return (
+      <div className="shrink-0 border-t border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-brand-navy/60" data-testid="palette-strip">
+        {pendingType && (
+          <p className="px-3 pt-1.5 text-[11px] text-brand-yellow">Tap the board to place it · tap the part again to cancel</p>
+        )}
+        <div className="flex gap-1.5 overflow-x-auto px-2 py-2">
+          {entries.map((def) => {
+            const isActive = pendingType === def.type
+            return (
+              <button
+                key={def.type}
+                onClick={() => onPick(isActive ? null : def.type)}
+                className={`shrink-0 flex flex-col items-center justify-center w-16 h-14 rounded-lg text-[11px] leading-tight border ${
+                  isActive
+                    ? 'bg-brand-yellow/20 text-brand-yellow border-brand-yellow/60'
+                    : 'text-gray-700 dark:text-gray-300 border-gray-200 dark:border-white/10 bg-white dark:bg-white/5'
+                }`}
+              >
+                <span className="font-mono text-base">{PALETTE_ICONS[def.type] ?? '?'}</span>
+                <span className="truncate max-w-full px-1">{def.displayName.replace('Voltage Source', 'Battery').replace('Circuit Breaker', 'Breaker')}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="w-44 shrink-0 border-r border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-brand-navy/60 overflow-y-auto">

@@ -16,7 +16,7 @@ export default function FailureToast(): JSX.Element | null {
   return (
     <div
       role="alert"
-      className="absolute left-1/2 -translate-x-1/2 top-3 z-20 max-w-lg px-4 py-2.5 rounded-lg shadow-lg bg-gray-900/95 text-gray-100 text-sm border border-orange-500/60 flex items-start gap-3"
+      className="absolute left-1/2 -translate-x-1/2 top-3 z-20 w-[calc(100%-1.5rem)] md:w-auto max-w-lg px-4 py-2.5 rounded-lg shadow-lg bg-gray-900/95 text-gray-100 text-sm border border-orange-500/60 flex items-start gap-3"
     >
       <span className="flex-1">{message}</span>
       <button onClick={dismiss} aria-label="Dismiss" className="text-gray-400 hover:text-white">

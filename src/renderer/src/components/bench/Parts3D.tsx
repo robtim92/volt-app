@@ -511,9 +511,19 @@ export function Part({ c, selected, showLabels }: { c: CircuitComponent; selecte
     return out
   }, [def])
 
+  const lastTap = useRef(0)
   const onClick = (e: ThreeEvent<MouseEvent>): void => {
     e.stopPropagation()
     selectComponent(c.id)
+    // Touch screens don't reliably fire dblclick: treat two quick taps as one
+    const touch = (e.nativeEvent as PointerEvent).pointerType === 'touch'
+    if (touch && toggleable) {
+      const now = performance.now()
+      if (now - lastTap.current < 350) {
+        toggleSwitch(c.id)
+        lastTap.current = 0
+      } else lastTap.current = now
+    }
   }
   const onDoubleClick = (e: ThreeEvent<MouseEvent>): void => {
     e.stopPropagation()

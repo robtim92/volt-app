@@ -69,22 +69,35 @@ export function useLevelRunner(): void {
     let lastTime = liveFrame.time
     pendingBurnouts.current = 0
 
+    // The authoritative attempt state lives here, updated every frame; the store
+    // gets a copy only when something visible changes (avoids 60 re-renders/s).
+    let progress: LevelProgress = useGameStore.getState().progress ?? newProgress(level)
+    let published = progress
+
     const tick = (): void => {
       raf = requestAnimationFrame(tick)
       const game = useGameStore.getState()
-      const prev = game.progress ?? newProgress(level)
-      if (prev.completed) return
+      // A restart (loadLevel) puts a fresh attempt in the store: adopt it
+      if (game.progress && game.progress !== published) {
+        progress = game.progress
+        published = game.progress
+      }
+      if (progress.completed) return
       const dt = Math.max(0, liveFrame.time - lastTime)
       lastTime = liveFrame.time
       const snap = liveFrame.snapshot
       const readings = snap?.solved ? { ...snap, terminalNodes: liveFrame.terminalNodes } : null
       const burnouts = pendingBurnouts.current
       pendingBurnouts.current = 0
-      const next = stepLevel(level, prev, useCircuitStore.getState().components, readings, dt, burnouts)
-      if (!sameGoals(prev, next)) game.setProgress(next)
-      if (next.completed) {
-        game.setProgress(next)
-        game.recordCompletion(level.id, next.stars, next.starChecks)
+      progress = stepLevel(level, progress, useCircuitStore.getState().components, readings, dt, burnouts)
+      if (!sameGoals(published, progress)) {
+        published = progress
+        game.setProgress(progress)
+      }
+      if (progress.completed) {
+        published = progress
+        game.setProgress(progress)
+        game.recordCompletion(level.id, progress.stars, progress.starChecks)
       }
     }
     raf = requestAnimationFrame(tick)

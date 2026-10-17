@@ -261,7 +261,8 @@ const SUFFIXES: Array<[number, string]> = [
 
 /** 4700 → "4.7k", 0.01 → "10m", 5 → "5" (unit appended if provided) */
 export function formatValue(value: number, unit = ''): string {
-  if (value === 0) return `0${unit ? ' ' + unit : ''}`
+  // Below a picounit is numerical noise (leakage, round-off): show it as zero
+  if (value === 0 || Math.abs(value) < 1e-12) return `0${unit ? ' ' + unit : ''}`
   const abs = Math.abs(value)
   let scaled = value
   let suffix = ''

@@ -25,8 +25,8 @@ export default function LevelComplete(): JSX.Element | null {
   ]
 
   return (
-    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/50 backdrop-blur-[2px] p-6" data-testid="level-complete">
-      <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-brand-navy border border-brand-yellow/50 shadow-2xl p-6 animate-card-in">
+    <div className="fixed md:absolute inset-0 z-40 flex items-center justify-center bg-black/50 backdrop-blur-[2px] p-3 md:p-6 overflow-y-auto" data-testid="level-complete">
+      <div className="w-full max-w-lg max-h-full overflow-y-auto rounded-2xl bg-white dark:bg-brand-navy border border-brand-yellow/50 shadow-2xl p-4 md:p-6 animate-card-in">
         <p className="text-xs uppercase tracking-wider text-brand-yellow text-center">Mission complete</p>
         <h2 className="text-2xl font-bold text-center text-gray-900 dark:text-white">{level.title}</h2>
         <div className="flex justify-center my-4 text-gray-300 dark:text-white/20">
@@ -61,7 +61,7 @@ export default function LevelComplete(): JSX.Element | null {
           <span className="font-semibold text-gray-900 dark:text-white">Why it works: </span>
           {level.debrief}
         </p>
-        <div className="flex gap-2 justify-end">
+        <div className="flex flex-wrap gap-2 justify-end">
           <button
             onClick={() => {
               dismiss()

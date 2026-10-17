@@ -174,7 +174,8 @@ export default function Bench3D(): JSX.Element {
         </button>
       </div>
       <p className="absolute bottom-2 left-3 text-[11px] text-gray-500 pointer-events-none">
-        Drag to orbit · right-drag to pan · scroll to zoom · click a part to inspect · double-click a switch to flip it
+        <span className="hidden md:inline">Drag to orbit · right-drag to pan · scroll to zoom · click a part to inspect · double-click a switch to flip it</span>
+        <span className="md:hidden">Drag to orbit · pinch to zoom · two fingers to pan · tap a part</span>
       </p>
     </div>
   )

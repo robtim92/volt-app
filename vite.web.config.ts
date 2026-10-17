@@ -5,6 +5,8 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   root: resolve(__dirname, 'src/renderer'),
+  // Relative asset paths so the build runs from any folder or host (e.g. a hosted preview)
+  base: './',
   plugins: [react()],
   resolve: {
     alias: {

@@ -9,6 +9,7 @@ import LevelHUD from '../campaign/LevelHUD'
 import LevelComplete from '../campaign/LevelComplete'
 import BadgeToast from '../campaign/BadgeToast'
 import { getLevel } from '../../game/levels'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import {
   deleteCircuit,
   exportCircuitJSON,
@@ -55,6 +56,7 @@ export default function SandboxPanel(): JSX.Element {
   const scopeOpen = useUIStore((s) => s.scopeOpen)
   const toggleScope = useUIStore((s) => s.toggleScope)
   const benchView = useUIStore((s) => s.benchView)
+  const mobile = useIsMobile()
   const activeLevelId = useUIStore((s) => s.activeLevelId)
   const activeLevel = activeLevelId ? getLevel(activeLevelId) : undefined
 
@@ -203,12 +205,12 @@ export default function SandboxPanel(): JSX.Element {
           value={circuitName}
           onChange={(e) => setCircuitName(e.target.value)}
           aria-label="Circuit name"
-          className="w-40 px-2 py-1 text-sm rounded border border-gray-300 dark:border-white/20 bg-white dark:bg-brand-dark text-gray-900 dark:text-gray-100"
+          className="hidden md:inline-block w-40 px-2 py-1 text-sm rounded border border-gray-300 dark:border-white/20 bg-white dark:bg-brand-dark text-gray-900 dark:text-gray-100"
         />
         <button
           onClick={handleSave}
           disabled={!circuitName.trim() || components.length === 0}
-          className="px-3 py-1 text-sm rounded bg-brand-yellow/20 text-brand-yellow font-medium hover:bg-brand-yellow/30 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="hidden md:inline-block px-3 py-1 text-sm rounded bg-brand-yellow/20 text-brand-yellow font-medium hover:bg-brand-yellow/30 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Save
         </button>
@@ -216,7 +218,7 @@ export default function SandboxPanel(): JSX.Element {
           value=""
           onChange={(e) => handleLoad(e.target.value)}
           aria-label="Load circuit"
-          className="px-2 py-1 text-sm rounded border border-gray-300 dark:border-white/20 bg-white dark:bg-brand-dark text-gray-900 dark:text-gray-100"
+          className="hidden md:inline-block px-2 py-1 text-sm rounded border border-gray-300 dark:border-white/20 bg-white dark:bg-brand-dark text-gray-900 dark:text-gray-100"
         >
           <option value="">Load…</option>
           {saved.map((s) => (
@@ -229,7 +231,7 @@ export default function SandboxPanel(): JSX.Element {
           onClick={handleDeleteSaved}
           disabled={!saved.some((s) => s.name === circuitName.trim())}
           title="Delete the saved circuit with this name"
-          className="px-2 py-1 text-sm rounded text-red-500 hover:bg-red-500/10 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="hidden md:inline-block px-2 py-1 text-sm rounded text-red-500 hover:bg-red-500/10 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Delete
         </button>
@@ -239,7 +241,7 @@ export default function SandboxPanel(): JSX.Element {
           onClick={handleExportPNG}
           disabled={components.length === 0}
           title="Export the canvas as a PNG image"
-          className="px-2 py-1 text-sm rounded bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="hidden md:inline-block px-2 py-1 text-sm rounded bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           PNG
         </button>
@@ -247,14 +249,14 @@ export default function SandboxPanel(): JSX.Element {
           onClick={handleExportJSON}
           disabled={components.length === 0}
           title="Export the circuit as a JSON file"
-          className="px-2 py-1 text-sm rounded bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="hidden md:inline-block px-2 py-1 text-sm rounded bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           Export
         </button>
         <button
           onClick={() => fileInputRef.current?.click()}
           title="Import a circuit from a JSON file"
-          className="px-2 py-1 text-sm rounded bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-white/20"
+          className="hidden md:inline-block px-2 py-1 text-sm rounded bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-white/20"
         >
           Import
         </button>
@@ -276,7 +278,7 @@ export default function SandboxPanel(): JSX.Element {
               : 'bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-white/20'
           }`}
         >
-          ∿ Scope
+          ∿<span className="hidden md:inline"> Scope</span>
         </button>
         <button
           onClick={undo}
@@ -285,7 +287,7 @@ export default function SandboxPanel(): JSX.Element {
           aria-label="Undo"
           className="px-2 py-1 text-sm rounded bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          ↶ Undo
+          ↶<span className="hidden md:inline"> Undo</span>
         </button>
         <button
           onClick={redo}
@@ -294,7 +296,7 @@ export default function SandboxPanel(): JSX.Element {
           aria-label="Redo"
           className="px-2 py-1 text-sm rounded bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-white/20 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          ↷ Redo
+          ↷<span className="hidden md:inline"> Redo</span>
         </button>
         <button
           onClick={clearCircuit}
@@ -368,18 +370,19 @@ export default function SandboxPanel(): JSX.Element {
       )}
 
       {/* Main area */}
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-col md:flex-row flex-1 min-h-0">
         <Palette
+          horizontal={mobile}
           pendingType={pendingType}
           onPick={setPendingType}
           allowedTypes={activeLevel?.palette ?? activeCircuitQuiz?.card.allowedComponents}
         />
-        <div className="flex-1 min-w-0 relative flex">
+        <div className={`flex-1 min-w-0 min-h-0 relative flex flex-col md:flex-row ${mobile ? 'order-first' : ''}`}>
           <FailureToast />
           <BadgeToast />
           <LevelComplete />
           {benchView !== '3d' && (
-            <div className={`relative min-w-0 ${benchView === 'split' ? 'w-1/2 border-r border-gray-200 dark:border-white/10' : 'flex-1'}`}>
+            <div className={`relative min-w-0 min-h-0 ${benchView === 'split' ? 'h-1/2 md:h-auto md:w-1/2 border-b md:border-b-0 md:border-r border-gray-200 dark:border-white/10' : 'flex-1'}`}>
               <CircuitCanvas
                 pendingType={pendingType}
                 onPlaced={onPlaced}
@@ -388,7 +391,7 @@ export default function SandboxPanel(): JSX.Element {
             </div>
           )}
           {benchView !== '2d' && (
-            <div className={`relative min-w-0 ${benchView === 'split' ? 'w-1/2' : 'flex-1'}`}>
+            <div className={`relative min-w-0 min-h-0 ${benchView === 'split' ? 'h-1/2 md:h-auto md:w-1/2' : 'flex-1'}`}>
               <Suspense
                 fallback={
                   <div className="h-full flex items-center justify-center text-sm text-gray-400">
@@ -401,7 +404,7 @@ export default function SandboxPanel(): JSX.Element {
             </div>
           )}
         </div>
-        <Inspector />
+        <Inspector sheet={mobile} />
       </div>
 
       {scopeOpen && <Oscilloscope />}

@@ -7,6 +7,7 @@ import { useGameStore } from '@stores/gameStore'
 import { useUIStore } from '@stores/uiStore'
 import { getLevel } from '../../game/levels'
 import { loadLevel } from '../../hooks/useLevelRunner'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import Stars from './Stars'
 
 export default function LevelHUD(): JSX.Element | null {
@@ -16,7 +17,8 @@ export default function LevelHUD(): JSX.Element | null {
   const progress = useGameStore((s) => s.progress)
   const hintsShown = useGameStore((s) => s.hintsShown)
   const showHint = useGameStore((s) => s.showHint)
-  const [briefOpen, setBriefOpen] = useState(true)
+  const mobile = useIsMobile()
+  const [briefOpen, setBriefOpen] = useState(!mobile)
   const level = levelId ? getLevel(levelId) : undefined
   if (!level) return null
   const hold = level.holdSeconds ?? 0.5
@@ -24,14 +26,14 @@ export default function LevelHUD(): JSX.Element | null {
   const allGoals = progress?.goals.every(Boolean) ?? false
 
   return (
-    <div className="shrink-0 border-b border-brand-yellow/40 bg-brand-yellow/5 dark:bg-brand-yellow/[0.07] px-4 py-2.5" data-testid="level-hud">
-      <div className="flex items-start gap-4">
+    <div className="shrink-0 border-b border-brand-yellow/40 bg-brand-yellow/5 dark:bg-brand-yellow/[0.07] px-3 md:px-4 py-2 md:py-2.5 max-h-[45dvh] overflow-y-auto" data-testid="level-hud">
+      <div className="flex flex-col md:flex-row md:items-start gap-2 md:gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-[10px] uppercase tracking-wider font-semibold text-brand-yellow">Mission</span>
             <h2 className="text-sm font-bold text-gray-900 dark:text-white truncate">{level.title}</h2>
             <button onClick={() => setBriefOpen((o) => !o)} className="text-xs text-gray-500 hover:text-gray-800 dark:hover:text-gray-200">
-              {briefOpen ? 'hide brief' : 'show brief'}
+              {briefOpen ? 'hide brief' : mobile ? 'brief & stars' : 'show brief'}
             </button>
           </div>
           {briefOpen && <p className="text-xs text-gray-600 dark:text-gray-300 mt-1 leading-relaxed max-w-3xl">{level.brief}</p>}
@@ -44,7 +46,7 @@ export default function LevelHUD(): JSX.Element | null {
           )}
         </div>
 
-        <div className="w-72 shrink-0">
+        <div className="w-full md:w-72 shrink-0">
           <ul className="space-y-0.5" aria-label="Goals">
             {level.goals.map((g, i) => {
               const ok = progress?.goals[i] ?? false
@@ -61,14 +63,14 @@ export default function LevelHUD(): JSX.Element | null {
           <div className="mt-1.5 h-1.5 rounded bg-gray-200 dark:bg-white/10 overflow-hidden" title="Hold all goals to complete">
             <div className={`h-full ${allGoals ? 'bg-emerald-500' : 'bg-gray-400'} transition-[width] duration-150`} style={{ width: `${allGoals ? heldPct : 0}%` }} />
           </div>
-          <div className="mt-1.5 text-[11px] text-gray-500 dark:text-gray-400 space-y-0.5">
+          <div className={`mt-1.5 text-[11px] text-gray-500 dark:text-gray-400 space-y-0.5 ${mobile && !briefOpen ? 'hidden' : ''}`}>
             <p className="flex items-center gap-1"><Stars count={2} size={10} /> {level.stars[0].label}</p>
             <p className="flex items-center gap-1"><Stars count={3} size={10} /> {level.stars[1].label}</p>
             {(progress?.burnouts ?? 0) > 0 && <p className="text-red-500">💥 {progress?.burnouts} part(s) burned this attempt</p>}
           </div>
         </div>
 
-        <div className="flex flex-col gap-1.5 shrink-0">
+        <div className="flex flex-row md:flex-col gap-1.5 shrink-0">
           <button
             onClick={showHint}
             disabled={hintsShown >= level.hints.length}

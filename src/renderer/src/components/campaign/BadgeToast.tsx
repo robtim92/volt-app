@@ -15,7 +15,7 @@ export default function BadgeToast(): JSX.Element | null {
   const badge = id ? BADGES.find((b) => b.id === id) : undefined
   if (!badge) return null
   return (
-    <div role="status" className="absolute right-4 bottom-4 z-20 flex items-center gap-3 px-4 py-3 rounded-xl bg-gray-900/95 text-white border border-brand-yellow/60 shadow-xl animate-card-in">
+    <div role="status" className="absolute right-3 bottom-3 left-3 md:left-auto z-20 flex items-center gap-3 px-4 py-3 rounded-xl bg-gray-900/95 text-white border border-brand-yellow/60 shadow-xl animate-card-in">
       <span className="text-3xl">{badge.icon}</span>
       <div>
         <p className="text-[10px] uppercase tracking-wider text-brand-yellow">Badge unlocked</p>

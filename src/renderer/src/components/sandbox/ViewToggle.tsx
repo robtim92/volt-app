@@ -1,10 +1,10 @@
 /** Segmented control: schematic / split / 3D bench. */
 import { useUIStore, type BenchView } from '@stores/uiStore'
 
-const OPTIONS: { id: BenchView; label: string; title: string }[] = [
-  { id: '2d', label: 'Schematic', title: 'Schematic only' },
-  { id: 'split', label: 'Split', title: 'Schematic and 3D bench side by side' },
-  { id: '3d', label: '3D Bench', title: '3D workbench only' }
+const OPTIONS: { id: BenchView; label: string; short: string; title: string }[] = [
+  { id: '2d', label: 'Schematic', short: '2D', title: 'Schematic only' },
+  { id: 'split', label: 'Split', short: 'Both', title: 'Schematic and 3D bench together' },
+  { id: '3d', label: '3D Bench', short: '3D', title: '3D workbench only' }
 ]
 
 export default function ViewToggle(): JSX.Element {
@@ -24,7 +24,8 @@ export default function ViewToggle(): JSX.Element {
               : 'bg-transparent text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10'
           }`}
         >
-          {o.label}
+          <span className="hidden md:inline">{o.label}</span>
+          <span className="md:hidden">{o.short}</span>
         </button>
       ))}
     </div>

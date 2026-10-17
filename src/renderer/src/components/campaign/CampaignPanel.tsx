@@ -23,7 +23,7 @@ function MissionCard({ level, onClose }: { level: Level; onClose: () => void }):
   const startLevel = useUIStore((s) => s.startLevel)
   const record = useGameStore((s) => s.completed[level.id])
   return (
-    <div className="rounded-2xl border border-brand-yellow/40 bg-white dark:bg-brand-navy p-5 shadow-xl" data-testid="mission-card">
+    <div className="rounded-2xl border border-brand-yellow/40 bg-white dark:bg-brand-navy p-4 sm:p-5 shadow-xl" data-testid="mission-card">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-wider text-brand-yellow">Mission</p>
@@ -52,7 +52,7 @@ function MissionCard({ level, onClose }: { level: Level; onClose: () => void }):
           </ul>
         </div>
       </div>
-      <div className="mt-5 flex items-center gap-3">
+      <div className="mt-5 flex flex-wrap items-center gap-3">
         <button
           onClick={() => startLevel(level.id)}
           className="px-5 py-2 rounded-lg bg-brand-yellow text-brand-dark font-semibold hover:bg-brand-yellow/90"
@@ -74,7 +74,7 @@ export default function CampaignPanel(): JSX.Element {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 sm:space-y-8">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Campaign</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -101,11 +101,11 @@ export default function CampaignPanel(): JSX.Element {
                 </span>
               </div>
 
-              <div className="relative rounded-2xl bg-gray-50 dark:bg-white/[0.03] border border-gray-200 dark:border-white/10 px-4 py-8 overflow-hidden">
+              <div className="relative rounded-2xl bg-gray-50 dark:bg-white/[0.03] border border-gray-200 dark:border-white/10 px-1 sm:px-4 py-6 sm:py-8 overflow-hidden">
                 <svg className="absolute inset-0 w-full h-full pointer-events-none" preserveAspectRatio="none" viewBox="0 0 100 100" aria-hidden>
                   <path d="M 8 50 C 18 15, 28 15, 30 50 S 45 85, 52 50 S 66 15, 74 50 S 86 85, 92 50" fill="none" stroke="currentColor" className="text-gray-300 dark:text-white/10" strokeWidth="1.2" strokeDasharray="2 2" vectorEffect="non-scaling-stroke" />
                 </svg>
-                <ol className="relative grid grid-cols-5 gap-2">
+                <ol className="relative grid grid-cols-5 gap-1 sm:gap-2">
                   {ch.levels.map((l, i) => {
                     const rec = completed[l.id]
                     const unlocked = isLevelUnlocked(l.id, completed)
@@ -116,7 +116,7 @@ export default function CampaignPanel(): JSX.Element {
                           disabled={!unlocked}
                           onClick={() => setOpenId(l.id)}
                           aria-label={`Level ${i + 1}: ${l.title}${unlocked ? '' : ' (locked)'}`}
-                          className={`relative w-16 h-16 rounded-full text-lg font-bold flex items-center justify-center border-2 transition-transform hover:scale-105 disabled:hover:scale-100 ${
+                          className={`relative w-12 h-12 sm:w-16 sm:h-16 rounded-full text-lg font-bold flex items-center justify-center border-2 transition-transform hover:scale-105 disabled:hover:scale-100 ${
                             rec
                               ? 'bg-brand-yellow text-brand-dark border-brand-yellow'
                               : unlocked
@@ -127,7 +127,7 @@ export default function CampaignPanel(): JSX.Element {
                           {current && <span className="absolute inset-0 rounded-full animate-ping bg-brand-yellow/30" />}
                           <span className="relative">{unlocked ? i + 1 : '🔒'}</span>
                         </button>
-                        <p className={`mt-2 text-xs font-medium ${unlocked ? 'text-gray-800 dark:text-gray-100' : 'text-gray-400'}`}>{l.title}</p>
+                        <p className={`mt-2 text-[11px] sm:text-xs leading-tight font-medium ${unlocked ? 'text-gray-800 dark:text-gray-100' : 'text-gray-400'}`}>{l.title}</p>
                         <span className="text-gray-400"><Stars count={rec?.stars ?? 0} size={12} /></span>
                       </li>
                     )

@@ -8,12 +8,12 @@ const tracks: { id: Track; label: string; icon: string; subtitle: string }[] = [
   { id: 'digital', label: 'Digital Computing', icon: '🔲', subtitle: 'Logic & CPUs' }
 ]
 
-export default function Sidebar(): JSX.Element {
+export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}): JSX.Element {
   const { activeTrack, setActiveTrack, activePanel, setActivePanel, darkMode, toggleDarkMode } =
     useUIStore()
 
   return (
-    <aside className="w-60 shrink-0 flex flex-col border-r border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-brand-navy">
+    <aside className="w-60 h-full shrink-0 flex flex-col overflow-y-auto border-r border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-brand-navy">
       {/* Logo */}
       <div className="flex items-center gap-2 px-4 py-4 border-b border-gray-200 dark:border-white/10">
         <span className="text-2xl">⚡</span>
@@ -30,7 +30,10 @@ export default function Sidebar(): JSX.Element {
         {tracks.map((t) => (
           <button
             key={t.id}
-            onClick={() => setActiveTrack(t.id)}
+            onClick={() => {
+              setActiveTrack(t.id)
+              onNavigate?.()
+            }}
             className={`nav-item w-full text-left ${activeTrack === t.id ? 'active' : ''}`}
           >
             <span className="text-base">{t.icon}</span>
@@ -57,7 +60,10 @@ export default function Sidebar(): JSX.Element {
         ].map((item) => (
           <button
             key={item.id}
-            onClick={() => setActivePanel(item.id)}
+            onClick={() => {
+              setActivePanel(item.id)
+              onNavigate?.()
+            }}
             className={`nav-item w-full text-left ${activePanel === item.id ? 'active' : ''}`}
           >
             <span>{item.icon}</span>
@@ -77,7 +83,10 @@ export default function Sidebar(): JSX.Element {
           <span>{darkMode ? 'Light mode' : 'Dark mode'}</span>
         </button>
         <button
-          onClick={() => setActivePanel('settings')}
+          onClick={() => {
+            setActivePanel('settings')
+            onNavigate?.()
+          }}
           className={`nav-item w-full text-left ${activePanel === 'settings' ? 'active' : ''}`}
         >
           <span>⚙️</span>

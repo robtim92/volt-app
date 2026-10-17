@@ -1,11 +1,34 @@
-import { useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 import { useCircuitStore } from '@stores/circuitStore'
 import { ELEMENTS, formatValue, parseValue } from '../../sim/elements'
 import { terminalKey } from '../../sim/netlist'
 import { wireCurrent, wireNetVoltage } from '../../sim/measure'
 import PartHealth from './PartHealth'
 
+/** True when the Inspector renders as a phone bottom sheet. */
+const SheetContext = createContext<(() => void) | null>(null)
+
 function Shell({ children }: { children: React.ReactNode }): JSX.Element {
+  const closeSheet = useContext(SheetContext)
+  if (closeSheet) {
+    return (
+      <div
+        className="fixed inset-x-0 bottom-0 z-30 max-h-[55dvh] overflow-y-auto rounded-t-2xl border-t border-brand-yellow/40 bg-gray-50 dark:bg-brand-navy shadow-2xl px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))] animate-card-in"
+        data-testid="inspector-sheet"
+      >
+        <div className="flex items-center justify-between mb-1">
+          <span className="mx-auto h-1 w-10 rounded-full bg-gray-300 dark:bg-white/20" aria-hidden />
+        </div>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Inspector</p>
+          <button onClick={closeSheet} aria-label="Close inspector" className="w-8 h-8 rounded-full text-gray-500 hover:bg-gray-200 dark:hover:bg-white/10">
+            ✕
+          </button>
+        </div>
+        {children}
+      </div>
+    )
+  }
   return (
     <div className="w-56 shrink-0 border-l border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-brand-navy/60 p-3 overflow-y-auto">
       <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">
@@ -30,7 +53,7 @@ function acReading(peak: number, phaseDeg: number, unit: string): string {
   return `${formatValue(Math.abs(peak) / Math.SQRT2, unit)} ∠${Math.round(phaseDeg)}°`
 }
 
-export default function Inspector(): JSX.Element {
+function InspectorBody(): JSX.Element {
   const selectedId = useCircuitStore((s) => s.selectedComponentId)
   const component = useCircuitStore((s) =>
     s.components.find((c) => c.id === s.selectedComponentId)
@@ -342,5 +365,23 @@ export default function Inspector(): JSX.Element {
         </p>
       )}
     </Shell>
+  )
+}
+
+/**
+ * Side panel on desktop; on phones (`sheet`), a bottom sheet shown only while
+ * something is selected.
+ */
+export default function Inspector({ sheet = false }: { sheet?: boolean } = {}): JSX.Element | null {
+  const hasSelection = useCircuitStore(
+    (s) => s.selectedComponentId !== null || s.selectedWireId !== null || s.selectedIds.length > 0
+  )
+  const clearSelection = useCircuitStore((s) => s.clearSelection)
+  if (!sheet) return <InspectorBody />
+  if (!hasSelection) return null
+  return (
+    <SheetContext.Provider value={clearSelection}>
+      <InspectorBody />
+    </SheetContext.Provider>
   )
 }
