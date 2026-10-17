@@ -210,7 +210,12 @@ stars, XP, ranks, badges, parts collection). Browser-first; Electron optional. S
 - [x] Step 2 — 3D workbench linked to the schematic
 - [x] Step 3 — campaign, stars, XP, ranks, badges, parts collection
 - [x] Step 4 — Chapter 1 "Light It Up" (5 levels), verified end-to-end
-- [ ] Step 5 — "zoom inside" views, 3D direct manipulation, Chapter 2+ and AC chapters
+- [ ] Step 5 — realistic wires (AWG gauge always on, default 22 AWG; resistance, ampacity, melting) and power sources (battery chemistries with internal resistance, bench supply with current limit); first "zoom inside" view (electron drift)
+- [ ] Step 6 — electromagnet/coil component built from turns, gauge, length/diameter and core (air, iron, ferrite, steel): derived R, L, field, heat; core saturation as a nonlinear inductor; field lines + compass grid in 3D
+- [ ] Step 7 — permanent magnets, iron objects (paperclips, nails) with lift force; Biot–Savart field view in a worker
+- [ ] Step 8 — induction (Faraday EMF from moving magnets), coupled coils / real transformer, relay, solenoid, DC motor
+- Gate before more content: Steps 5–8 tests green and every lesson and level still passes. Then: Ch 2 Time & Diodes → Ch 3 Magnetism → Ch 4 Induction → AC chapters → digital track. Polish alongside: drag-to-place in 3D, remaining zoom-inside views, transistors in the time-domain solver.
+- Decision (Oct 17, 2026): finish the simulation environment before pushing learning modules further; magnetics use analytic coil models + Biot–Savart (~10–20% of real hobby builds), no full 3D FEM.
 
 ### Phase 5 — Digital Track + Polish (~8 weeks)
 - Event-driven logic simulator with propagation delay; clocked sequential update
