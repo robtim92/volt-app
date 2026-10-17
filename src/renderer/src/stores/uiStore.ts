@@ -43,6 +43,8 @@ interface UIState {
   examplesOpen: boolean
   /** Wire shown in the "look inside the wire" view. */
   wireZoomId: string | null
+  /** default corner style for wires that don't set their own */
+  wireStyle: 'square' | 'rounded'
 
   toggleDarkMode: () => void
   setActiveTrack: (track: Track) => void
@@ -57,6 +59,7 @@ interface UIState {
   exitLevel: () => void
   setExamplesOpen: (open: boolean) => void
   setWireZoom: (id: string | null) => void
+  setWireStyle: (style: 'square' | 'rounded') => void
   openExample: (id: string) => void
   closeExample: () => void
   setExampleStep: (step: number) => void
@@ -84,6 +87,7 @@ export const useUIStore = create<UIState>()(
       exampleStep: 0,
       examplesOpen: false,
       wireZoomId: null,
+      wireStyle: 'square',
 
       // Actions
       toggleDarkMode: () => set((s) => ({ darkMode: !s.darkMode })),
@@ -99,6 +103,7 @@ export const useUIStore = create<UIState>()(
         set({ activeLevelId: id, activeCircuitQuiz: null, activeExampleId: null, activePanel: 'sandbox' }),
       setExamplesOpen: (examplesOpen) => set({ examplesOpen }),
       setWireZoom: (wireZoomId) => set({ wireZoomId }),
+      setWireStyle: (wireStyle) => set({ wireStyle }),
       openExample: (id) =>
         set({
           activeExampleId: id,
@@ -133,7 +138,8 @@ export const useUIStore = create<UIState>()(
         darkMode: s.darkMode,
         activeTrack: s.activeTrack,
         hasOnboarded: s.hasOnboarded,
-        benchView: s.benchView
+        benchView: s.benchView,
+        wireStyle: s.wireStyle
       })
     }
   )

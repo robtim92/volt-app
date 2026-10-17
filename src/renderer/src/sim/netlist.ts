@@ -19,7 +19,8 @@
 import { GROUND, LED_PARAMS, type Netlist, type NetlistElement } from './solver'
 import type { ACNetlist, ACNetlistElement } from './acSolver'
 import type { TransientElement, TransientNetlist } from './transient'
-import { DEFAULT_GAUGE, MIN_WIRE_LENGTH, drawnLength, wireResistance } from './wire'
+import { DEFAULT_GAUGE, METRES_PER_PIXEL, MIN_WIRE_LENGTH, wireResistance } from './wire'
+import { pathLength, wirePath } from './wireRoute'
 import {
   BENCH_DEFAULT_LIMIT,
   CHEMISTRIES,
@@ -28,7 +29,7 @@ import {
   packResistance,
   type BatteryParams
 } from './battery'
-import { ELEMENTS, terminalPosition, type CircuitComponent, type Wire } from './elements'
+import { ELEMENTS, type CircuitComponent, type Wire } from './elements'
 
 /** Resistance used for closed switches, ammeters, and DC-shorted inductors */
 const SHORT_RESISTANCE = 1e-3
@@ -406,12 +407,9 @@ export interface TransientBuildOptions {
 /** Length (m) of a wire: its explicit length, or measured from the drawing. */
 export function wireLength(w: Wire, byId: Map<string, CircuitComponent>): number {
   if (w.length !== undefined && w.length > 0) return w.length
-  const a = byId.get(w.fromComponentId)
-  const b = byId.get(w.toComponentId)
-  if (!a || !b) return MIN_WIRE_LENGTH
-  const pa = terminalPosition(a, w.fromTerminal)
-  const pb = terminalPosition(b, w.toTerminal)
-  return drawnLength(pa.x, pa.y, pb.x, pb.y)
+  const path = wirePath(w, byId)
+  if (!path) return MIN_WIRE_LENGTH
+  return Math.max(MIN_WIRE_LENGTH, pathLength(path) * METRES_PER_PIXEL)
 }
 
 export function batteryParams(c: CircuitComponent, soc?: Record<string, number>): BatteryParams {

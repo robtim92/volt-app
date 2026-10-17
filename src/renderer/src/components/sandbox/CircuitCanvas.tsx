@@ -16,7 +16,7 @@
  * Rendering runs on a requestAnimationFrame loop reading the store directly,
  * so current-flow animation stays smooth without React re-renders.
  */
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useCircuitStore } from '@stores/circuitStore'
 import { useUIStore } from '@stores/uiStore'
 import {
@@ -36,6 +36,20 @@ import { liveFrame, useLiveSimStore } from '@stores/liveSimStore'
 import { DEFAULT_GAUGE, diameterMm } from '../../sim/wire'
 import { batteryParams } from '../../sim/netlist'
 import { cellOcv } from '../../sim/battery'
+import {
+  dragCorner,
+  dragSegment,
+  insertCorner,
+  nearestSegment,
+  orthogonalize,
+  pointAlong,
+  removeCorner,
+  simplify,
+  terminalDirection,
+  tracePath,
+  wirePath,
+  type Pt
+} from '../../sim/wireRoute'
 import type { SimulationResult } from '@stores/circuitStore'
 
 interface CircuitCanvasProps {
@@ -79,18 +93,6 @@ function voltageColor(v: number, maxAbs: number, neutral: string): string {
   const hue = t >= 0 ? 25 : 215 // warm = positive, cool = negative
   const sat = Math.round(85 * Math.abs(t))
   return `hsl(${hue}, ${sat}%, 52%)`
-}
-
-function distToSegment(
-  px: number, py: number,
-  x1: number, y1: number, x2: number, y2: number
-): number {
-  const dx = x2 - x1
-  const dy = y2 - y1
-  const lenSq = dx * dx + dy * dy
-  let t = lenSq === 0 ? 0 : ((px - x1) * dx + (py - y1) * dy) / lenSq
-  t = Math.max(0, Math.min(1, t))
-  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy))
 }
 
 // ── Symbol drawing (horizontal, centred at origin, terminals at ±2·GRID) ────
@@ -338,6 +340,19 @@ export default function CircuitCanvas({
   const marqueeRef = useRef<MarqueeState | null>(null)
   const panRef = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null)
   const wireStartRef = useRef<TerminalHit | null>(null)
+  /** click-by-click wire routing: corners placed so far (null = not routing) */
+  const routeRef = useRef<{ corners: Pt[] } | null>(null)
+  const [routing, setRouting] = useState<number | null>(null)
+  /** reshaping a wire: dragging one of its segments or corners */
+  const wireEditRef = useRef<{
+    wireId: string
+    kind: 'segment' | 'corner'
+    index: number
+    path: Pt[]
+    x0: number
+    y0: number
+    moved: boolean
+  } | null>(null)
   const viewRef = useRef({ ox: 0, oy: 0, scale: 1 })
   // Dev-only handle so end-to-end tests can aim touches at terminals
   if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__voltView = viewRef
@@ -424,18 +439,91 @@ export default function CircuitCanvas({
     return null
   }
 
-  const findWire = (x: number, y: number): Wire | null => {
-    const { components, wires } = useCircuitStore.getState()
-    const byId = new Map(components.map((c) => [c.id, c]))
-    for (const w of wires) {
-      const from = byId.get(w.fromComponentId)
-      const to = byId.get(w.toComponentId)
-      if (!from || !to) continue
-      const a = terminalPosition(from, w.fromTerminal)
-      const b = terminalPosition(to, w.toTerminal)
-      if (distToSegment(x, y, a.x, a.y, b.x, b.y) < hitRadius(6, 14)) return w
+  const pathOf = (wire: Wire): Pt[] | null => {
+    const { components } = useCircuitStore.getState()
+    return wirePath(wire, new Map(components.map((c) => [c.id, c])))
+  }
+
+  const findWireHit = (x: number, y: number): { wire: Wire; segment: number; path: Pt[] } | null => {
+    const { wires } = useCircuitStore.getState()
+    for (let i = wires.length - 1; i >= 0; i--) {
+      const path = pathOf(wires[i])
+      if (!path) continue
+      const hit = nearestSegment(path, x, y)
+      if (hit.dist < hitRadius(6, 14)) return { wire: wires[i], segment: hit.index, path }
     }
     return null
+  }
+
+  const findWire = (x: number, y: number): Wire | null => findWireHit(x, y)?.wire ?? null
+
+  /** A corner handle of the selected wire under the pointer (index into its interior corners). */
+  const findCorner = (x: number, y: number): { wire: Wire; corner: number; path: Pt[] } | null => {
+    const { wires, selectedWireId } = useCircuitStore.getState()
+    const wire = wires.find((w) => w.id === selectedWireId)
+    if (!wire) return null
+    const path = pathOf(wire)
+    if (!path) return null
+    for (let i = 1; i < path.length - 1; i++) {
+      if (Math.hypot(path[i].x - x, path[i].y - y) <= hitRadius(7, 18)) return { wire, corner: i - 1, path }
+    }
+    return null
+  }
+
+  // ── Wire routing (click-by-click) ──
+  const cancelRoute = (): void => {
+    routeRef.current = null
+    wireStartRef.current = null
+    setRouting(null)
+  }
+
+  const finishWire = (end: TerminalHit): void => {
+    const start = wireStartRef.current
+    const corners = routeRef.current?.corners ?? []
+    if (start && !(end.componentId === start.componentId && end.terminal === start.terminal)) {
+      useCircuitStore.getState().addWire({
+        id: `w-${Date.now()}-${Math.floor(Math.random() * 1e4)}`,
+        fromComponentId: start.componentId,
+        fromTerminal: start.terminal,
+        toComponentId: end.componentId,
+        toTerminal: end.terminal,
+        points: corners.length ? corners.map((c) => ({ ...c })) : undefined
+      })
+    }
+    cancelRoute()
+  }
+
+  const undoCorner = (): void => {
+    const r = routeRef.current
+    if (!r) return
+    r.corners.pop()
+    setRouting(r.corners.length)
+  }
+
+  /** Double-click / double-tap: flip switches, add or remove wire corners. */
+  const activateAt = (x: number, y: number): boolean => {
+    const store = useCircuitStore.getState()
+    const comp = findComponent(x, y)
+    if (comp && (comp.type === 'switch' || comp.type === 'breaker' || comp.type === 'gfci')) {
+      store.toggleSwitch(comp.id)
+      return true
+    }
+    const corner = findCorner(x, y)
+    if (corner) {
+      store.checkpoint()
+      store.updateWire(corner.wire.id, { points: removeCorner(corner.path, corner.corner) })
+      return true
+    }
+    const hit = findWireHit(x, y)
+    if (hit) {
+      store.checkpoint()
+      store.selectWire(hit.wire.id)
+      store.updateWire(hit.wire.id, {
+        points: insertCorner(hit.path, hit.segment, { x: snapToGrid(x), y: snapToGrid(y) })
+      })
+      return true
+    }
+    return false
   }
 
   // ── Pointer interaction (mouse, pen and touch) ──
@@ -451,7 +539,9 @@ export default function CircuitCanvas({
 
   const cancelGestures = (): void => {
     dragRef.current = null
-    wireStartRef.current = null
+    wireEditRef.current = null
+    // click-by-click routing survives pinches and the pointer leaving the board
+    if (!routeRef.current) wireStartRef.current = null
     marqueeRef.current = null
     panRef.current = null
   }
@@ -515,16 +605,17 @@ export default function CircuitCanvas({
     tapRef.current = null
     if (e.pointerType === 'touch') {
       mouseRef.current.inside = false
-      if (tap && !tap.moved) {
+      if (tap && !tap.moved && !routeRef.current) {
         const { x, y } = canvasPoint(e)
         const comp = findComponent(x, y)
+        const wire = comp ? null : findWire(x, y)
+        const id = comp ? comp.id : wire ? `wire:${wire.id}` : null
         const now = performance.now()
-        if (comp && lastTapRef.current?.id === comp.id && now - lastTapRef.current.t < 350) {
-          if (comp.type === 'switch' || comp.type === 'breaker' || comp.type === 'gfci')
-            useCircuitStore.getState().toggleSwitch(comp.id)
+        if (id && lastTapRef.current?.id === id && now - lastTapRef.current.t < 350) {
+          activateAt(x, y)
           lastTapRef.current = null
         } else {
-          lastTapRef.current = comp ? { id: comp.id, t: now } : null
+          lastTapRef.current = id ? { id, t: now } : null
         }
       }
     }
@@ -578,9 +669,28 @@ export default function CircuitCanvas({
       return
     }
 
+    // Routing a wire click by click: a terminal finishes it, anywhere else drops a corner
+    if (routeRef.current && wireStartRef.current) {
+      const end = findTerminal(x, y)
+      if (end) {
+        finishWire(end)
+        return
+      }
+      routeRef.current.corners.push({ x: snapToGrid(x), y: snapToGrid(y) })
+      setRouting(routeRef.current.corners.length)
+      return
+    }
+
     const terminal = findTerminal(x, y)
     if (terminal) {
       wireStartRef.current = terminal
+      return
+    }
+
+    // Grab a corner of the selected wire
+    const corner = findCorner(x, y)
+    if (corner) {
+      wireEditRef.current = { wireId: corner.wire.id, kind: 'corner', index: corner.corner, path: corner.path, x0: x, y0: y, moved: false }
       return
     }
 
@@ -606,9 +716,11 @@ export default function CircuitCanvas({
       return
     }
 
-    const wire = findWire(x, y)
-    if (wire) {
-      store.selectWire(wire.id)
+    const hit = findWireHit(x, y)
+    if (hit) {
+      store.selectWire(hit.wire.id)
+      // dragging a segment slides it sideways
+      wireEditRef.current = { wireId: hit.wire.id, kind: 'segment', index: hit.segment, path: hit.path, x0: x, y0: y, moved: false }
       return
     }
 
@@ -633,6 +745,19 @@ export default function CircuitCanvas({
 
     const { x, y } = canvasPoint(e)
     mouseRef.current = { x, y, inside: true }
+
+    const edit = wireEditRef.current
+    if (edit) {
+      if (!edit.moved) {
+        if (Math.hypot(x - edit.x0, y - edit.y0) < 4 / viewRef.current.scale) return
+        useCircuitStore.getState().checkpoint()
+        edit.moved = true
+      }
+      const to = { x: snapToGrid(x), y: snapToGrid(y) }
+      const points = edit.kind === 'segment' ? dragSegment(edit.path, edit.index, to) : dragCorner(edit.path, edit.index, to)
+      useCircuitStore.getState().updateWire(edit.wireId, { points })
+      return
+    }
 
     const drag = dragRef.current
     if (drag) {
@@ -662,19 +787,31 @@ export default function CircuitCanvas({
     }
     const { x, y } = canvasPoint(e)
 
+    const edit = wireEditRef.current
+    if (edit) {
+      wireEditRef.current = null
+      if (edit.moved) {
+        // tidy: fold the elbows in and drop corners left in a straight line
+        const st = useCircuitStore.getState()
+        const w = st.wires.find((ww) => ww.id === edit.wireId)
+        const path = w ? pathOf(w) : null
+        if (path) {
+          const inner = simplify(path).slice(1, -1)
+          st.updateWire(edit.wireId, { points: inner.length ? inner : undefined })
+        }
+      }
+    }
+
     const start = wireStartRef.current
-    if (start) {
+    if (start && !routeRef.current) {
       const end = findTerminal(x, y)
       if (end && !(end.componentId === start.componentId && end.terminal === start.terminal)) {
-        useCircuitStore.getState().addWire({
-          id: `w-${Date.now()}-${Math.floor(Math.random() * 1e4)}`,
-          fromComponentId: start.componentId,
-          fromTerminal: start.terminal,
-          toComponentId: end.componentId,
-          toTerminal: end.terminal
-        })
+        finishWire(end)
+      } else {
+        // Tapped the terminal, or let go on the board: keep routing click by click
+        routeRef.current = { corners: end ? [] : [{ x: snapToGrid(x), y: snapToGrid(y) }] }
+        setRouting(routeRef.current.corners.length)
       }
-      wireStartRef.current = null
     }
 
     const marquee = marqueeRef.current
@@ -698,14 +835,17 @@ export default function CircuitCanvas({
   }
 
   const handleDoubleClick = (e: React.MouseEvent): void => {
+    if (routeRef.current) return
     const { x, y } = canvasPoint(e)
-    const comp = findComponent(x, y)
-    if (comp && (comp.type === 'switch' || comp.type === 'breaker' || comp.type === 'gfci'))
-      useCircuitStore.getState().toggleSwitch(comp.id)
+    activateAt(x, y)
   }
 
   const handleContextMenu = (e: React.MouseEvent): void => {
     e.preventDefault()
+    if (routeRef.current) {
+      cancelRoute()
+      return
+    }
     const { x, y } = canvasPoint(e)
     const wire = findWire(x, y)
     if (wire) useCircuitStore.getState().removeWire(wire.id)
@@ -757,8 +897,14 @@ export default function CircuitCanvas({
       const selectedIds = store.selectedIds
       const primary = store.selectedComponentId
 
+      if (routeRef.current && (e.key === 'Backspace' || e.key === 'Delete')) {
+        e.preventDefault()
+        if (routeRef.current.corners.length) undoCorner()
+        else cancelRoute()
+        return
+      }
       if (e.key === 'Escape') {
-        wireStartRef.current = null
+        cancelRoute()
         marqueeRef.current = null
         onPlaced()
         store.clearSelection()
@@ -878,12 +1024,18 @@ export default function CircuitCanvas({
       let wireReadout: { x: number; y: number; text: string } | null = null
 
       // ── wires ──
+      const defaultStyle = useUIStore.getState().wireStyle
       for (const wire of wires) {
-        const from = byId.get(wire.fromComponentId)
-        const to = byId.get(wire.toComponentId)
-        if (!from || !to) continue
-        const a = terminalPosition(from, wire.fromTerminal)
-        const b = terminalPosition(to, wire.toTerminal)
+        const path = wirePath(wire, byId)
+        if (!path) continue
+        const style = wire.style ?? defaultStyle
+        const mid = pointAlong(path, 0.5)
+        const stroke = (): void => {
+          tracePath(ctx, path, style)
+          ctx.stroke()
+        }
+        ctx.lineJoin = 'round'
+        ctx.lineCap = 'round'
 
         // selection halo under the wire
         if (wire.id === selectedWireId) {
@@ -891,10 +1043,7 @@ export default function CircuitCanvas({
           ctx.globalAlpha = 0.35
           ctx.lineWidth = 7
           ctx.setLineDash([])
-          ctx.beginPath()
-          ctx.moveTo(a.x, a.y)
-          ctx.lineTo(b.x, b.y)
-          ctx.stroke()
+          stroke()
           ctx.globalAlpha = 1
         }
 
@@ -906,16 +1055,14 @@ export default function CircuitCanvas({
           if (fx.componentId !== wire.id) continue
           const age = (nowMs - fx.at) / 700
           if (age < 0 || age > 1) continue
-          const mx = (a.x + b.x) / 2
-          const my = (a.y + b.y) / 2
           ctx.strokeStyle = `rgba(255,170,40,${1 - age})`
           ctx.lineWidth = 3
           for (let k = 0; k < 8; k++) {
             const ang = (k / 8) * Math.PI * 2
             const r0 = 6 + 26 * age
             ctx.beginPath()
-            ctx.moveTo(mx + Math.cos(ang) * r0, my + Math.sin(ang) * r0)
-            ctx.lineTo(mx + Math.cos(ang) * (r0 + 10), my + Math.sin(ang) * (r0 + 10))
+            ctx.moveTo(mid.x + Math.cos(ang) * r0, mid.y + Math.sin(ang) * r0)
+            ctx.lineTo(mid.x + Math.cos(ang) * (r0 + 10), mid.y + Math.sin(ang) * (r0 + 10))
             ctx.stroke()
           }
         }
@@ -923,33 +1070,24 @@ export default function CircuitCanvas({
           ctx.strokeStyle = '#ef4444'
           ctx.lineWidth = 2
           ctx.setLineDash([4, 5])
-          ctx.beginPath()
-          ctx.moveTo(a.x, a.y)
-          ctx.lineTo(b.x, b.y)
-          ctx.stroke()
+          stroke()
           ctx.setLineDash([])
           ctx.font = 'bold 10px Inter, system-ui, sans-serif'
           ctx.fillStyle = '#ef4444'
           ctx.textAlign = 'center'
-          ctx.fillText('MELTED', (a.x + b.x) / 2, (a.y + b.y) / 2 - 6)
+          ctx.fillText('MELTED', mid.x, mid.y - 6)
           continue
         }
         if (wheat > 0.6) {
           const t = Math.min(1, (wheat - 0.6) / 1.2)
           ctx.strokeStyle = `rgba(255,${Math.round(140 - 100 * t)},30,${0.25 + 0.5 * t})`
           ctx.lineWidth = thick + 6 + 6 * t
-          ctx.beginPath()
-          ctx.moveTo(a.x, a.y)
-          ctx.lineTo(b.x, b.y)
-          ctx.stroke()
+          stroke()
         }
         ctx.strokeStyle = v !== null ? voltageColor(v, maxV, inkNeutral) : inkNeutral
         ctx.lineWidth = thick
         ctx.setLineDash([])
-        ctx.beginPath()
-        ctx.moveTo(a.x, a.y)
-        ctx.lineTo(b.x, b.y)
-        ctx.stroke()
+        stroke()
 
         if (solved) {
           const i = wireCurrent(wire, simResult!)
@@ -960,41 +1098,73 @@ export default function CircuitCanvas({
             ctx.lineWidth = 2.5
             ctx.setLineDash([3, 9])
             ctx.lineDashOffset = i > 0 ? -offset : offset
-            ctx.beginPath()
-            ctx.moveTo(a.x, a.y)
-            ctx.lineTo(b.x, b.y)
-            ctx.stroke()
+            stroke()
             ctx.setLineDash([])
           }
         }
 
-        // build the readout for the selected wire
         if (wire.id === selectedWireId) {
+          // reshaping handles: grips on each segment, dots on each corner
+          ctx.fillStyle = dark ? '#0F0F1A' : '#ffffff'
+          ctx.strokeStyle = accent
+          ctx.lineWidth = 1.5
+          for (let k = 0; k < path.length - 1; k++) {
+            const a = path[k]
+            const b = path[k + 1]
+            if (Math.hypot(b.x - a.x, b.y - a.y) < 30) continue
+            const mx = (a.x + b.x) / 2
+            const my = (a.y + b.y) / 2
+            const horiz = Math.abs(a.y - b.y) < 1e-6
+            ctx.beginPath()
+            if (horiz) ctx.rect(mx - 5, my - 2.5, 10, 5)
+            else ctx.rect(mx - 2.5, my - 5, 5, 10)
+            ctx.fill()
+            ctx.stroke()
+          }
+          for (let k = 1; k < path.length - 1; k++) {
+            ctx.beginPath()
+            ctx.arc(path[k].x, path[k].y, 4, 0, Math.PI * 2)
+            ctx.fillStyle = accent
+            ctx.fill()
+          }
+
+          // readout
           const netV = solved ? wireNetVoltage(wire, simResult!) : null
           const netI = solved ? wireCurrent(wire, simResult!) : null
           const parts: string[] = []
           if (netV !== null) parts.push(formatValue(netV, 'V'))
           if (netI !== null) parts.push(formatValue(Math.abs(netI), 'A'))
           wireReadout = {
-            x: (a.x + b.x) / 2,
-            y: (a.y + b.y) / 2,
+            x: mid.x,
+            y: mid.y,
             text: parts.length > 0 ? parts.join('  ·  ') : 'no reading'
           }
         }
       }
 
-      // rubber-band wire preview
+      // wire being drawn: through the corners placed so far to the pointer
       const wireStart = wireStartRef.current
-      if (wireStart && mouseRef.current.inside) {
-        ctx.strokeStyle = dark ? 'rgba(232,181,0,0.6)' : 'rgba(202,138,4,0.6)'
+      if (wireStart) {
+        const corners = routeRef.current?.corners ?? []
+        const pts: Pt[] = [{ x: wireStart.x, y: wireStart.y }, ...corners]
+        if (mouseRef.current.inside) pts.push({ x: snapToGrid(mouseRef.current.x), y: snapToGrid(mouseRef.current.y) })
+        const startComp = byId.get(wireStart.componentId)
+        const preview = orthogonalize(pts, startComp ? terminalDirection(startComp, wireStart.terminal) : null)
+        ctx.strokeStyle = dark ? 'rgba(232,181,0,0.75)' : 'rgba(202,138,4,0.75)'
         ctx.lineWidth = 2
         ctx.setLineDash([5, 5])
-        ctx.beginPath()
-        ctx.moveTo(wireStart.x, wireStart.y)
-        ctx.lineTo(mouseRef.current.x, mouseRef.current.y)
+        tracePath(ctx, preview, defaultStyle)
         ctx.stroke()
         ctx.setLineDash([])
+        ctx.fillStyle = accent
+        for (const c of corners) {
+          ctx.beginPath()
+          ctx.arc(c.x, c.y, 3.5, 0, Math.PI * 2)
+          ctx.fill()
+        }
       }
+      ctx.lineCap = 'butt'
+      ctx.lineJoin = 'miter'
 
       // ── components ──
       for (const comp of components) {
@@ -1226,6 +1396,24 @@ export default function CircuitCanvas({
     >
       ⤢ Fit
     </button>
+    {routing !== null && (
+      <div
+        className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 rounded-full bg-gray-900/90 text-white text-xs pl-3 pr-1.5 py-1.5 shadow-lg max-w-[94%]"
+        data-testid="wire-routing-hint"
+      >
+        <span className="whitespace-nowrap overflow-hidden text-ellipsis">
+          {routing === 0 ? 'Tap the board to add corners, then a terminal to finish' : `${routing} corner${routing === 1 ? '' : 's'} · tap a terminal to finish`}
+        </span>
+        {routing > 0 && (
+          <button onClick={undoCorner} className="px-2 py-0.5 rounded-full bg-white/15 hover:bg-white/25 whitespace-nowrap">
+            ↶ Corner
+          </button>
+        )}
+        <button onClick={cancelRoute} className="px-2 py-0.5 rounded-full bg-white/15 hover:bg-white/25">
+          Cancel
+        </button>
+      </div>
+    )}
     <canvas
       ref={canvasRef}
       data-testid="circuit-canvas"

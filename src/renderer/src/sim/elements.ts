@@ -51,6 +51,10 @@ export interface Wire {
   length?: number
   /** melted by overcurrent: an open circuit until repaired */
   damaged?: boolean
+  /** hand-placed corners (canvas coords); undefined = automatic route */
+  points?: { x: number; y: number }[]
+  /** corner style; undefined = the board default */
+  style?: 'square' | 'rounded'
 }
 
 export interface TerminalDef {

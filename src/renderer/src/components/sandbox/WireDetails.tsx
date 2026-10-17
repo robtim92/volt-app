@@ -18,6 +18,10 @@ export default function WireDetails({ wire, current }: { wire: Wire; current: nu
   const checkpoint = useCircuitStore((s) => s.checkpoint)
   const components = useCircuitStore((s) => s.components)
   const setWireZoom = useUIStore((s) => s.setWireZoom)
+  const setWireStyle = useUIStore((s) => s.setWireStyle)
+  const defaultStyle = useUIStore((s) => s.wireStyle)
+  const style = wire.style ?? defaultStyle
+  const touchHint = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
   useCircuitStore((s) => s.simResult) // re-render on live publishes
   const gauge = wire.gauge ?? DEFAULT_GAUGE
   const byId = new Map(components.map((c) => [c.id, c]))
@@ -75,6 +79,48 @@ export default function WireDetails({ wire, current }: { wire: Wire; current: nu
           className="mt-1 w-full px-2 py-1 text-sm rounded border border-gray-300 dark:border-white/20 bg-white dark:bg-brand-dark text-gray-900 dark:text-gray-100"
         />
       </label>
+      <div>
+        <span className="text-xs text-gray-500 dark:text-gray-400">Corners</span>
+        <div className="mt-1 flex gap-1" role="group" aria-label="Wire corners">
+          {(['square', 'rounded'] as const).map((st) => (
+            <button
+              key={st}
+              onClick={() => {
+                checkpoint()
+                updateWire(wire.id, { style: st })
+              }}
+              aria-pressed={style === st}
+              className={`flex-1 px-2 py-1 text-xs rounded border ${style === st ? 'border-brand-yellow bg-brand-yellow/15 text-gray-900 dark:text-gray-100' : 'border-gray-300 dark:border-white/20 text-gray-600 dark:text-gray-300'}`}
+            >
+              {st === 'square' ? '┐ Square' : '╮ Rounded'}
+            </button>
+          ))}
+          <button
+            onClick={() => {
+              checkpoint()
+              updateWire(wire.id, { points: undefined })
+            }}
+            disabled={!wire.points}
+            title="Reset to the automatic route"
+            className="flex-1 px-2 py-1 text-xs rounded border border-gray-300 dark:border-white/20 text-gray-600 dark:text-gray-300 disabled:opacity-40"
+          >
+            Straighten
+          </button>
+        </div>
+        <button
+          onClick={() => {
+            checkpoint()
+            setWireStyle(style)
+            for (const w of useCircuitStore.getState().wires) if (w.style) updateWire(w.id, { style: undefined })
+          }}
+          className="mt-1 text-[11px] text-sky-600 dark:text-sky-400 hover:underline"
+        >
+          Use {style} corners for every wire
+        </button>
+        <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+          Drag a section to move it · {touchHint ? 'double-tap' : 'double-click'} the wire to add a bend, a corner to remove it
+        </p>
+      </div>
       <div className="text-sm space-y-1 text-gray-700 dark:text-gray-300">
         <p className="flex justify-between"><span>Resistance</span><span className="font-mono">{formatValue(resistance, 'Ω')}</span></p>
         <p className="flex justify-between"><span>Voltage drop</span><span className="font-mono">{formatValue(i * resistance, 'V')}</span></p>

@@ -2,6 +2,30 @@
 
 ---
 
+## Wire routing — bends, corners and curves
+**Date:** October 17, 2026
+
+### Shipped
+- **Automatic routes** (`sim/wireRoute.ts`): every wire runs in horizontal and vertical sections, leaving
+  each terminal the way it faces. The router tries several L, Z and U shapes and picks the shortest one
+  that doesn't cut through a part or run over another terminal. Old saved circuits route automatically.
+- **Hand routing**: tap or click a terminal, tap the board to drop corners, tap a terminal to finish
+  (Cancel / undo-corner chip; Esc, Backspace and right-click work too). Dragging from a terminal and letting
+  go on the board continues the same way.
+- **Reshaping**: drag any section of a wire sideways; drag a corner of the selected wire; double-click
+  (double-tap) a wire to add a bend, a corner to remove it; Straighten resets it. Moving a part keeps the
+  hand-placed corners and re-bends only the sections touching it.
+- **Square or Rounded corners** per wire, with a "use for every wire" board default.
+- Wire length (and so resistance and voltage drop) follows the route. 3D jumpers follow it too.
+
+### Test status
+290 tests passing · typecheck clean · web build OK · routing checked in headless Chromium (desktop + phone).
+
+### Next
+Junctions (tap into the middle of a wire), then Phase H.
+
+---
+
 ## Gamified 3D Lab — Step 5 (realistic wires and power sources)
 **Date:** October 17, 2026
 
