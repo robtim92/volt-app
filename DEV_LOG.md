@@ -2,6 +2,31 @@
 
 ---
 
+## Plan update — curriculum build-out, alternating with Phase H
+**Date:** October 20, 2026
+
+Chapter 1 (5 missions, unlocked in order) is the only campaign content so far. Agreed with Tim to build
+the curriculum on the sandbox features that already work, **alternating** curriculum batches with the
+remaining Phase H work (H2 → H5). Magnetism / Induction chapters still wait for Steps 6–8.
+
+### Curriculum batch 1 (next session)
+1. **Progression**: missions stay in order within a chapter; the next chapter opens on a star threshold;
+   "jump ahead" to any chapter; an unlock-everything toggle in Settings (for testing).
+2. **Mission types + goal kinds**: Predict (type the expected reading; bonus star within 10%), Fix
+   (troubleshoot a broken circuit), plus goals for voltage at a point, battery runtime, wire drop,
+   no trips for N house-hours and home-panel checks.
+3. **Chapter 2 · Real Power** (6 missions, Step 5 features).
+4. **Chapter 5 · Home Power** (5 missions in the Home workspace; needs mission support there).
+
+### Batch 2
+Chapter 3 · Time & Diodes and Chapter 4 · AC & Protection. Every mission keeps a reference solution
+played through the live sim in tests.
+
+### Order
+Curriculum batch 1 → H2 time & energy → curriculum batch 2 → H3 solar → H4 storage → H5 → Steps 6–8.
+
+---
+
 ## Phase H1 — Home Power: residential panel
 **Date:** October 17, 2026
 
