@@ -8,6 +8,8 @@
  */
 import type { CircuitComponent, Wire } from '../sim/elements'
 import type { Chapter, Level } from './types'
+import { CHAPTER2_LEVELS } from './chapter2'
+import { CHAPTER5_LEVELS } from './chapter5'
 
 const c = (
   id: string,
@@ -228,12 +230,39 @@ const afterglow: Level = {
 export const CHAPTERS: Chapter[] = [
   {
     id: 'c1',
+    number: 1,
     title: 'Light It Up',
     subtitle: 'Loops, resistors, series & parallel, and your first capacitor',
     icon: '💡',
     levels: [closeTheLoop, magicSmoke, chainReaction, branchOut, afterglow]
+  },
+  {
+    id: 'c2',
+    number: 2,
+    title: 'Real Power',
+    subtitle: 'Batteries that sag and drain, wire that heats, and a current-limited supply',
+    icon: '🔋',
+    levels: CHAPTER2_LEVELS,
+    requires: { chapter: 'c1', stars: 8 }
+  },
+  {
+    id: 'c5',
+    number: 5,
+    title: 'Home Power',
+    subtitle: 'Breakers, voltage drop, hidden faults and the service load calculation',
+    icon: '🏠',
+    levels: CHAPTER5_LEVELS,
+    requires: { chapter: 'c2', stars: 10 }
   }
 ]
+
+/** Chapters planned but not built yet (shown on the map as coming soon). */
+export const COMING_SOON = [
+  { number: 3, title: 'Time & Diodes', icon: '⏱️', subtitle: 'RC timers, blinkers, rectifiers and flyback diodes' },
+  { number: 4, title: 'AC & Protection', icon: '〰️', subtitle: 'The scope, transformers, breakers and GFCIs' }
+]
+
+export const chapterOf = (levelId: string): Chapter | undefined => CHAPTERS.find((ch) => ch.levels.some((l) => l.id === levelId))
 
 export const ALL_LEVELS: Level[] = CHAPTERS.flatMap((ch) => ch.levels)
 
@@ -243,6 +272,8 @@ export function getLevel(id: string): Level | undefined {
 
 /** The level after `id` (within the campaign), if any. */
 export function nextLevel(id: string): Level | undefined {
-  const i = ALL_LEVELS.findIndex((l) => l.id === id)
-  return i >= 0 ? ALL_LEVELS[i + 1] : undefined
+  const ch = chapterOf(id)
+  if (!ch) return undefined
+  const i = ch.levels.findIndex((l) => l.id === id)
+  return ch.levels[i + 1]
 }

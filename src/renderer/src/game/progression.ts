@@ -47,5 +47,7 @@ export const BADGES: BadgeDef[] = [
   { id: 'magic-smoke', title: 'Let the Smoke Out', description: 'Burn out a part. Every engineer has.', icon: '💨' },
   { id: 'three-star', title: 'Perfectionist', description: 'Earn three stars on a level.', icon: '⭐' },
   { id: 'chapter-1', title: 'Lit Up', description: 'Finish Chapter 1: Light It Up.', icon: '🏅' },
+  { id: 'chapter-2', title: 'Powered Up', description: 'Finish Chapter 2: Real Power.', icon: '🔋' },
+  { id: 'chapter-5', title: 'Homeowner', description: 'Finish Chapter 5: Home Power.', icon: '🏠' },
   { id: 'clean-sweep', title: 'Clean Sweep', description: 'Three stars on every level in a chapter.', icon: '🏆' }
 ]

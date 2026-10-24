@@ -3,13 +3,15 @@ import { useGameStore } from '@stores/gameStore'
 import { useUIStore } from '@stores/uiStore'
 import { getLevel, nextLevel } from '../../game/levels'
 import { BADGES, rankFor } from '../../game/progression'
-import { loadLevel } from '../../hooks/useLevelRunner'
+import { levelPanel, loadLevel } from '../../hooks/useLevelRunner'
 import Stars from './Stars'
 
 export default function LevelComplete(): JSX.Element | null {
   const result = useGameStore((s) => s.lastCompletion)
   const xp = useGameStore((s) => s.xp)
   const dismiss = useGameStore((s) => s.dismissCompletion)
+  const prediction = useGameStore((s) => s.prediction)
+  const measured = useGameStore((s) => s.progress?.measured)
   const startLevel = useUIStore((s) => s.startLevel)
   const exitLevel = useUIStore((s) => s.exitLevel)
   const setActivePanel = useUIStore((s) => s.setActivePanel)
@@ -39,6 +41,13 @@ export default function LevelComplete(): JSX.Element | null {
             </li>
           ))}
         </ul>
+        {level.predict && measured !== undefined && (
+          <p className="mb-3 text-sm rounded-lg bg-sky-500/10 text-sky-800 dark:text-sky-200 px-3 py-2">
+            🎯 You predicted <strong>{prediction !== null ? `${prediction} ${level.predict.unit}` : 'nothing'}</strong>; the bench measured{' '}
+            <strong>{measured.toFixed(2)} {level.predict.unit}</strong>
+            {prediction !== null && ` (${Math.abs(((prediction - measured) / (measured || 1)) * 100).toFixed(0)}% off)`}.
+          </p>
+        )}
         <div className="flex items-center justify-between rounded-lg bg-brand-yellow/10 px-3 py-2 mb-4">
           <span className="text-sm font-semibold text-brand-yellow">+{result.xpGained} XP</span>
           <span className="text-xs text-gray-500 dark:text-gray-400">
@@ -85,7 +94,7 @@ export default function LevelComplete(): JSX.Element | null {
             <button
               onClick={() => {
                 dismiss()
-                startLevel(next.id)
+                startLevel(next.id, levelPanel(next))
               }}
               className="px-4 py-2 text-sm rounded-lg bg-brand-yellow text-brand-dark font-semibold hover:bg-brand-yellow/90"
             >

@@ -61,7 +61,9 @@ export default function SandboxPanel(): JSX.Element {
   const benchView = useUIStore((s) => s.benchView)
   const mobile = useIsMobile()
   const activeLevelId = useUIStore((s) => s.activeLevelId)
-  const activeLevel = activeLevelId ? getLevel(activeLevelId) : undefined
+  const levelHere = activeLevelId ? getLevel(activeLevelId) : undefined
+  // Home Power missions are played in the Home workspace
+  const activeLevel = levelHere && !levelHere.home ? levelHere : undefined
   const setExamplesOpen = useUIStore((s) => s.setExamplesOpen)
 
   const activeCircuitQuiz = useUIStore((s) => s.activeCircuitQuiz)

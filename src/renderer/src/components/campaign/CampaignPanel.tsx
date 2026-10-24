@@ -6,13 +6,20 @@
  * opens its mission card with the goals and star criteria.
  */
 import { useState } from 'react'
-import { useGameStore, isLevelUnlocked } from '@stores/gameStore'
+import { useGameStore, isLevelUnlocked, chapterUnlocked, chapterStars } from '@stores/gameStore'
 import { useUIStore } from '@stores/uiStore'
-import { CHAPTERS, getLevel } from '../../game/levels'
+import { CHAPTERS, COMING_SOON, getLevel } from '../../game/levels'
+import { levelPanel } from '../../hooks/useLevelRunner'
 import { ELEMENTS } from '../../sim/elements'
 import type { Level } from '../../game/types'
 import Stars from './Stars'
 import RankCard from './RankCard'
+
+const TYPE_TAG: Record<string, { icon: string; label: string }> = {
+  fix: { icon: '🔧', label: 'Fix' },
+  predict: { icon: '🎯', label: 'Predict' },
+  design: { icon: '📐', label: 'Design' }
+}
 
 const COLLECTIBLE = ['voltage_source', 'resistor', 'led', 'switch', 'capacitor', 'diode', 'inductor', 'transistor_npn'] as const
 const PART_ICON: Record<string, string> = {
@@ -26,13 +33,19 @@ function MissionCard({ level, onClose }: { level: Level; onClose: () => void }):
     <div className="rounded-2xl border border-brand-yellow/40 bg-white dark:bg-brand-navy p-4 sm:p-5 shadow-xl" data-testid="mission-card">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-wider text-brand-yellow">Mission</p>
+          <p className="text-xs uppercase tracking-wider text-brand-yellow">
+            Mission{level.type && TYPE_TAG[level.type] ? ` · ${TYPE_TAG[level.type].icon} ${TYPE_TAG[level.type].label}` : ''}
+            {level.home ? ' · 🏠 Home workspace' : ''}
+          </p>
           <h3 className="text-lg font-bold text-gray-900 dark:text-white">{level.title}</h3>
           <p className="text-xs text-gray-500 dark:text-gray-400 italic">{level.concept}</p>
         </div>
         <button onClick={onClose} aria-label="Close mission" className="text-gray-400 hover:text-gray-700 dark:hover:text-white">✕</button>
       </div>
       <p className="mt-3 text-sm text-gray-700 dark:text-gray-200 leading-relaxed">{level.brief}</p>
+      {level.predict && (
+        <p className="mt-2 text-xs text-sky-700 dark:text-sky-300">🎯 Before you build, you’ll lock in a prediction: {level.predict.prompt.toLowerCase()} ({level.predict.unit}).</p>
+      )}
       <div className="mt-4 grid sm:grid-cols-2 gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">Goals</p>
@@ -40,7 +53,11 @@ function MissionCard({ level, onClose }: { level: Level; onClose: () => void }):
             {level.goals.map((g) => (
               <li key={g.label}>• {g.label}</li>
             ))}
-            {(level.holdSeconds ?? 0.5) >= 1 && <li className="text-xs text-gray-500">…held for {level.holdSeconds} s</li>}
+            {(level.holdSeconds ?? 0.5) >= 1 && (
+              <li className="text-xs text-gray-500">
+                …held for {level.home ? `${Math.round((level.holdSeconds ?? 0) / 60) || level.holdSeconds} ${(level.holdSeconds ?? 0) >= 60 ? 'min' : 's'} of house time` : `${level.holdSeconds} s`}
+              </li>
+            )}
           </ul>
         </div>
         <div>
@@ -54,7 +71,7 @@ function MissionCard({ level, onClose }: { level: Level; onClose: () => void }):
       </div>
       <div className="mt-5 flex flex-wrap items-center gap-3">
         <button
-          onClick={() => startLevel(level.id)}
+          onClick={() => startLevel(level.id, levelPanel(level))}
           className="px-5 py-2 rounded-lg bg-brand-yellow text-brand-dark font-semibold hover:bg-brand-yellow/90"
         >
           {record ? 'Play again' : 'Start mission'} ▶
@@ -69,6 +86,10 @@ function MissionCard({ level, onClose }: { level: Level; onClose: () => void }):
 export default function CampaignPanel(): JSX.Element {
   const completed = useGameStore((s) => s.completed)
   const collection = useGameStore((s) => s.collection)
+  const jumped = useGameStore((s) => s.jumpedChapters)
+  const unlockAll = useGameStore((s) => s.unlockAll)
+  const jumpToChapter = useGameStore((s) => s.jumpToChapter)
+  const opts = { jumped, unlockAll }
   const [openId, setOpenId] = useState<string | null>(null)
   const open = openId ? getLevel(openId) : undefined
 
@@ -83,32 +104,61 @@ export default function CampaignPanel(): JSX.Element {
         </div>
         <RankCard />
 
-        {CHAPTERS.map((ch) => {
-          const firstOpen = ch.levels.find((l) => !completed[l.id] && isLevelUnlocked(l.id, completed))
+        {[...CHAPTERS.map((ch) => ({ kind: 'chapter' as const, ch, n: ch.number })), ...COMING_SOON.map((cs) => ({ kind: 'soon' as const, cs, n: cs.number }))]
+          .sort((a, b) => a.n - b.n)
+          .map((entry) => {
+          if (entry.kind === 'soon') {
+            const cs = entry.cs
+            return (
+              <section key={`soon${cs.number}`} className="opacity-60">
+                <p className="text-xs uppercase tracking-wider text-gray-400">Chapter {cs.number} · coming soon</p>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">{cs.icon} {cs.title}</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{cs.subtitle}</p>
+              </section>
+            )
+          }
+          const ch = entry.ch
+          const open = chapterUnlocked(ch, completed, opts)
+          const firstOpen = ch.levels.find((l) => !completed[l.id] && isLevelUnlocked(l.id, completed, opts))
           const chStars = ch.levels.reduce((n, l) => n + (completed[l.id]?.stars ?? 0), 0)
+          const req = ch.requires ? CHAPTERS.find((c) => c.id === ch.requires!.chapter) : undefined
           return (
             <section key={ch.id}>
               <div className="flex items-end justify-between mb-3">
                 <div>
-                  <p className="text-xs uppercase tracking-wider text-gray-400">Chapter 1</p>
+                  <p className="text-xs uppercase tracking-wider text-gray-400">Chapter {ch.number}</p>
                   <h2 className="text-xl font-bold text-gray-900 dark:text-white">
                     {ch.icon} {ch.title}
                   </h2>
                   <p className="text-sm text-gray-500 dark:text-gray-400">{ch.subtitle}</p>
                 </div>
-                <span className="text-sm text-gray-500 dark:text-gray-400">
+                <span className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap shrink-0 ml-3">
                   ⭐ {chStars} / {ch.levels.length * 3}
                 </span>
               </div>
 
-              <div className="relative rounded-2xl bg-gray-50 dark:bg-white/[0.03] border border-gray-200 dark:border-white/10 px-1 sm:px-4 py-6 sm:py-8 overflow-hidden">
+              {!open && req && ch.requires && (
+                <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-dashed border-gray-300 dark:border-white/15 px-4 py-3" data-testid={`locked-${ch.id}`}>
+                  <span className="text-sm text-gray-600 dark:text-gray-300">
+                    🔒 Earn ⭐ {ch.requires.stars} in Chapter {req.number} to open this chapter ({chapterStars(req.id, completed)} so far).
+                  </span>
+                  <button
+                    onClick={() => jumpToChapter(ch.id)}
+                    className="ml-auto px-3 py-1.5 text-xs rounded-lg border border-brand-yellow text-gray-900 dark:text-gray-100 hover:bg-brand-yellow/15"
+                  >
+                    Jump ahead ⤴
+                  </button>
+                </div>
+              )}
+              <div className={`relative rounded-2xl bg-gray-50 dark:bg-white/[0.03] border border-gray-200 dark:border-white/10 px-1 sm:px-4 py-6 sm:py-8 overflow-hidden ${open ? '' : 'opacity-60'}`}>
                 <svg className="absolute inset-0 w-full h-full pointer-events-none" preserveAspectRatio="none" viewBox="0 0 100 100" aria-hidden>
                   <path d="M 8 50 C 18 15, 28 15, 30 50 S 45 85, 52 50 S 66 15, 74 50 S 86 85, 92 50" fill="none" stroke="currentColor" className="text-gray-300 dark:text-white/10" strokeWidth="1.2" strokeDasharray="2 2" vectorEffect="non-scaling-stroke" />
                 </svg>
-                <ol className="relative grid grid-cols-5 gap-1 sm:gap-2">
+                <ol className="relative grid gap-1 sm:gap-2" style={{ gridTemplateColumns: `repeat(${ch.levels.length}, minmax(0, 1fr))` }}>
                   {ch.levels.map((l, i) => {
                     const rec = completed[l.id]
-                    const unlocked = isLevelUnlocked(l.id, completed)
+                    const unlocked = isLevelUnlocked(l.id, completed, opts)
+                    const tag = l.type ? TYPE_TAG[l.type] : undefined
                     const current = firstOpen?.id === l.id
                     return (
                       <li key={l.id} className={`flex flex-col items-center text-center ${i % 2 ? 'mt-14' : ''}`}>
@@ -126,6 +176,11 @@ export default function CampaignPanel(): JSX.Element {
                         >
                           {current && <span className="absolute inset-0 rounded-full animate-ping bg-brand-yellow/30" />}
                           <span className="relative">{unlocked ? i + 1 : '🔒'}</span>
+                          {tag && (
+                            <span className="absolute -top-1 -right-1 text-[11px] leading-none rounded-full bg-white dark:bg-brand-dark px-0.5" title={tag.label}>
+                              {tag.icon}
+                            </span>
+                          )}
                         </button>
                         <p className={`mt-2 text-[11px] sm:text-xs leading-tight font-medium ${unlocked ? 'text-gray-800 dark:text-gray-100' : 'text-gray-400'}`}>{l.title}</p>
                         <span className="text-gray-400"><Stars count={rec?.stars ?? 0} size={12} /></span>

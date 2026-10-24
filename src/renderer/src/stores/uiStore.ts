@@ -55,7 +55,7 @@ interface UIState {
   setScopeOpen: (open: boolean) => void
   toggleScope: () => void
   setBenchView: (view: BenchView) => void
-  startLevel: (id: string) => void
+  startLevel: (id: string, panel?: 'sandbox' | 'home') => void
   exitLevel: () => void
   setExamplesOpen: (open: boolean) => void
   setWireZoom: (id: string | null) => void
@@ -99,8 +99,8 @@ export const useUIStore = create<UIState>()(
       setScopeOpen: (open) => set({ scopeOpen: open }),
       toggleScope: () => set((s) => ({ scopeOpen: !s.scopeOpen })),
       setBenchView: (benchView) => set({ benchView }),
-      startLevel: (id) =>
-        set({ activeLevelId: id, activeCircuitQuiz: null, activeExampleId: null, activePanel: 'sandbox' }),
+      startLevel: (id, panel = 'sandbox') =>
+        set({ activeLevelId: id, activeCircuitQuiz: null, activeExampleId: null, activePanel: panel }),
       setExamplesOpen: (examplesOpen) => set({ examplesOpen }),
       setWireZoom: (wireZoomId) => set({ wireZoomId }),
       setWireStyle: (wireStyle) => set({ wireStyle }),

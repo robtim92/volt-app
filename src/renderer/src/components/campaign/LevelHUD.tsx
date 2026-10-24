@@ -17,6 +17,9 @@ export default function LevelHUD(): JSX.Element | null {
   const progress = useGameStore((s) => s.progress)
   const hintsShown = useGameStore((s) => s.hintsShown)
   const showHint = useGameStore((s) => s.showHint)
+  const prediction = useGameStore((s) => s.prediction)
+  const setPrediction = useGameStore((s) => s.setPrediction)
+  const [draft, setDraft] = useState('')
   const mobile = useIsMobile()
   const [briefOpen, setBriefOpen] = useState(!mobile)
   const level = levelId ? getLevel(levelId) : undefined
@@ -37,6 +40,36 @@ export default function LevelHUD(): JSX.Element | null {
             </button>
           </div>
           {briefOpen && <p className="text-xs text-gray-600 dark:text-gray-300 mt-1 leading-relaxed max-w-3xl">{level.brief}</p>}
+          {level.predict && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs" data-testid="prediction">
+              <span className="font-semibold text-sky-700 dark:text-sky-300">🎯 Predict:</span>
+              <span className="text-gray-600 dark:text-gray-300">{level.predict.prompt}</span>
+              {prediction === null ? (
+                <>
+                  <input
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    inputMode="decimal"
+                    aria-label="Your prediction"
+                    placeholder="?"
+                    className="w-20 px-2 py-0.5 rounded border border-sky-400/60 bg-white dark:bg-brand-dark text-gray-900 dark:text-gray-100"
+                  />
+                  <span className="text-gray-500">{level.predict.unit}</span>
+                  <button
+                    disabled={!Number.isFinite(parseFloat(draft))}
+                    onClick={() => setPrediction(parseFloat(draft))}
+                    className="px-2 py-0.5 rounded bg-sky-500 text-white font-medium disabled:opacity-40"
+                  >
+                    Lock in
+                  </button>
+                </>
+              ) : (
+                <span className="px-2 py-0.5 rounded bg-sky-500/15 text-sky-800 dark:text-sky-200 font-mono">
+                  {prediction} {level.predict.unit} 🔒
+                </span>
+              )}
+            </div>
+          )}
           {hintsShown > 0 && (
             <ul className="mt-1.5 space-y-0.5">
               {level.hints.slice(0, hintsShown).map((h, i) => (

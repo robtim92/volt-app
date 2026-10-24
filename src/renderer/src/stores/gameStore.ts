@@ -5,7 +5,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { ComponentType } from '../sim/elements'
-import { ALL_LEVELS, CHAPTERS, getLevel } from '../game/levels'
+import { CHAPTERS, chapterOf, getLevel } from '../game/levels'
+import type { Chapter } from '../game/types'
 import { BADGES, xpGain } from '../game/progression'
 import type { LevelProgress } from '../game/goals'
 
@@ -29,6 +30,10 @@ interface GameState {
   badges: string[]
   collection: ComponentType[]
   burnouts: number
+  /** chapters opened early with "jump ahead" */
+  jumpedChapters: string[]
+  /** testing / free-roam: every mission open */
+  unlockAll: boolean
 
   // ── transient (not persisted) ──
   /** live progress of the active level attempt */
@@ -38,7 +43,12 @@ interface GameState {
   lastCompletion: CompletionResult | null
   /** badge ids waiting to be announced */
   badgeQueue: string[]
+  /** the player's locked-in prediction for the current Predict mission */
+  prediction: number | null
 
+  setPrediction: (v: number | null) => void
+  jumpToChapter: (id: string) => void
+  setUnlockAll: (on: boolean) => void
   setProgress: (p: LevelProgress | null) => void
   showHint: () => void
   resetAttempt: () => void
@@ -50,11 +60,30 @@ interface GameState {
   resetProgress: () => void
 }
 
-export function isLevelUnlocked(id: string, completed: Record<string, LevelRecord>): boolean {
-  const i = ALL_LEVELS.findIndex((l) => l.id === id)
-  if (i <= 0) return i === 0
-  return !!completed[ALL_LEVELS[i - 1].id]
+export interface UnlockOptions {
+  jumped?: string[]
+  unlockAll?: boolean
 }
+
+export const chapterStars = (chapterId: string, completed: Record<string, LevelRecord>): number =>
+  CHAPTERS.find((c) => c.id === chapterId)?.levels.reduce((n, l) => n + (completed[l.id]?.stars ?? 0), 0) ?? 0
+
+/** A chapter opens when its required chapter has enough stars, or the player jumped ahead. */
+export function chapterUnlocked(ch: Chapter, completed: Record<string, LevelRecord>, opts: UnlockOptions = {}): boolean {
+  if (opts.unlockAll || !ch.requires || opts.jumped?.includes(ch.id)) return true
+  return chapterStars(ch.requires.chapter, completed) >= ch.requires.stars
+}
+
+/** Missions open in order within an open chapter. */
+export function isLevelUnlocked(id: string, completed: Record<string, LevelRecord>, opts: UnlockOptions = {}): boolean {
+  if (opts.unlockAll) return true
+  const ch = chapterOf(id)
+  if (!ch || !chapterUnlocked(ch, completed, opts)) return false
+  const i = ch.levels.findIndex((l) => l.id === id)
+  return i === 0 || !!completed[ch.levels[i - 1].id]
+}
+
+const CHAPTER_BADGE: Record<string, string> = { c1: 'chapter-1', c2: 'chapter-2', c5: 'chapter-5' }
 
 export const useGameStore = create<GameState>()(
   persist(
@@ -68,10 +97,16 @@ export const useGameStore = create<GameState>()(
       hintsShown: 0,
       lastCompletion: null,
       badgeQueue: [],
+      prediction: null,
+      jumpedChapters: [],
+      unlockAll: false,
 
+      setPrediction: (prediction) => set({ prediction }),
+      jumpToChapter: (id) => set((s) => ({ jumpedChapters: s.jumpedChapters.includes(id) ? s.jumpedChapters : [...s.jumpedChapters, id] })),
+      setUnlockAll: (unlockAll) => set({ unlockAll }),
       setProgress: (progress) => set({ progress }),
       showHint: () => set((s) => ({ hintsShown: s.hintsShown + 1 })),
-      resetAttempt: () => set({ progress: null, hintsShown: 0, lastCompletion: null }),
+      resetAttempt: () => set({ progress: null, hintsShown: 0, lastCompletion: null, prediction: null }),
 
       recordCompletion: (levelId, stars, starChecks) => {
         const s = get()
@@ -90,7 +125,8 @@ export const useGameStore = create<GameState>()(
         if (stars === 3 && !has('three-star')) earned.push('three-star')
         for (const ch of CHAPTERS) {
           const all = ch.levels.every((l) => completed[l.id])
-          if (all && ch.id === 'c1' && !has('chapter-1')) earned.push('chapter-1')
+          const badge = CHAPTER_BADGE[ch.id]
+          if (all && badge && !has(badge)) earned.push(badge)
           if (all && ch.levels.every((l) => completed[l.id].stars === 3) && !has('clean-sweep')) earned.push('clean-sweep')
         }
 
@@ -120,7 +156,7 @@ export const useGameStore = create<GameState>()(
       dismissCompletion: () => set({ lastCompletion: null }),
       shiftBadge: () => set((s) => ({ badgeQueue: s.badgeQueue.slice(1) })),
       resetProgress: () =>
-        set({ xp: 0, completed: {}, badges: [], collection: ['wire_node', 'ground'], burnouts: 0, badgeQueue: [] })
+        set({ xp: 0, completed: {}, badges: [], collection: ['wire_node', 'ground'], burnouts: 0, badgeQueue: [], jumpedChapters: [] })
     }),
     {
       name: 'volt-game',
@@ -129,7 +165,9 @@ export const useGameStore = create<GameState>()(
         completed: s.completed,
         badges: s.badges,
         collection: s.collection,
-        burnouts: s.burnouts
+        burnouts: s.burnouts,
+        jumpedChapters: s.jumpedChapters,
+        unlockAll: s.unlockAll
       })
     }
   )

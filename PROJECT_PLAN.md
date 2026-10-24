@@ -212,7 +212,7 @@ stars, XP, ranks, badges, parts collection). Browser-first; Electron optional. S
 - [x] Step 4 — Chapter 1 "Light It Up" (5 levels), verified end-to-end
 - [x] Step 5 — realistic wires (AWG gauge + length → resistance, ampacity heating, melting) and power sources (battery chemistries with internal resistance and drain, bench supply with CV/CC), "look inside the wire" view
 - [ ] Phase H — home power systems (panel, time & energy, solar, storage, examples) — H1 residential panel ✅
-- [ ] Curriculum batch 1 — progression (star-gated chapters, jump ahead, unlock-all), Predict/Fix missions and new goal kinds, Chapter 2 Real Power, Chapter 5 Home Power (alternating with Phase H)
+- [x] Curriculum batch 1 — progression (star-gated chapters, jump ahead, unlock-all), Predict/Fix missions and new goal kinds, Chapter 2 Real Power, Chapter 5 Home Power (alternating with Phase H)
 - [ ] Curriculum batch 2 — Chapter 3 Time & Diodes, Chapter 4 AC & Protection
 - [ ] Steps 6–8 — electromagnets, permanent magnets, induction (see the Volt Roadmap doc)
 - [ ] Then — Chapter 2+ and AC chapters, 3D direct manipulation

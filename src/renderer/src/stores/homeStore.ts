@@ -46,6 +46,8 @@ interface HomeState {
   publish: () => void
   resetClock: () => void
   loadExample: (id: string) => void
+  /** load a mission's starter design */
+  loadLevelDesign: (design: HomeDesign, speed?: number) => void
   closeExample: () => void
   setExampleStep: (n: number) => void
 }
@@ -190,6 +192,10 @@ export const useHomeStore = create<HomeState>()(
           playing: true,
           tick: s.tick + 1
         }))
+      },
+      loadLevelDesign: (design, speed = 1) => {
+        homeLive.runtime = newRuntime()
+        set((s) => ({ design: structuredClone(design), activeExampleId: null, selectedCircuitId: null, trips: [], speed, playing: true, tick: s.tick + 1 }))
       },
       closeExample: () => set({ activeExampleId: null, exampleStep: 0 }),
       setExampleStep: (exampleStep) => set({ exampleStep })

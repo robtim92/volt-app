@@ -11,6 +11,11 @@ import PanelView from './PanelView'
 import OneLineDiagram from './OneLineDiagram'
 import CircuitCard from './CircuitCard'
 import { fmtClock, fmtW, useHomeClock } from './useHomeClock'
+import { useUIStore } from '@stores/uiStore'
+import { getLevel } from '../../game/levels'
+import { useHomeLevelRunner } from '../../hooks/useLevelRunner'
+import LevelHUD from '../campaign/LevelHUD'
+import LevelComplete from '../campaign/LevelComplete'
 
 const House3D = lazy(() => import('./House3D'))
 
@@ -128,6 +133,9 @@ function TripToasts(): JSX.Element {
 
 export default function HomeWorkspace(): JSX.Element {
   useHomeClock()
+  useHomeLevelRunner()
+  const levelId = useUIStore((s) => s.activeLevelId)
+  const inMission = !!(levelId && getLevel(levelId)?.home)
   const mobile = useIsMobile()
   const [view, setView] = useState<'diagram' | 'house'>('diagram')
   const [tab, setTab] = useState<'panel' | 'diagram' | 'house' | 'circuit'>('panel')
@@ -148,11 +156,12 @@ export default function HomeWorkspace(): JSX.Element {
   return (
     <div className="h-full flex flex-col relative" data-testid="home-workspace">
       <div className="px-3 md:px-4 py-2 border-b border-gray-200 dark:border-white/10 flex items-center gap-2 flex-wrap">
-        <ExampleMenu />
+        {!inMission && <ExampleMenu />}
         <ClockBar />
       </div>
-      <Guide />
+      {inMission ? <LevelHUD /> : <Guide />}
       <TripToasts />
+      {inMission && <LevelComplete />}
       {mobile ? (
         <>
           <div className="flex border-b border-gray-200 dark:border-white/10" role="tablist">

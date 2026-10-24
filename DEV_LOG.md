@@ -2,6 +2,36 @@
 
 ---
 
+## Curriculum batch 1 — progression, Predict/Fix missions, Chapters 2 and 5
+**Date:** October 24, 2026
+
+### Shipped
+- **Progression**: missions open in order within a chapter; Chapter 2 opens at ⭐ 8 in Chapter 1, Chapter 5
+  at ⭐ 10 in Chapter 2; "Jump ahead" opens a chapter early; Settings → "Unlock every mission".
+  Chapters 3 and 4 appear on the map as coming soon. New badges for finishing Chapters 2 and 5.
+- **Mission types**: 🎯 Predict (lock in a reading before building; star within 5–10%, shown against the
+  measured value on the completion card), 🔧 Fix (starts broken), 📐 Design (open brief, judged by goals).
+- **New goal / star kinds** (`game/goals.ts`): measured voltage or current, wires intact, wires within
+  rating, battery runtime, supply CV/CC mode, wire gauge range; Home: appliances on, nothing tripped,
+  no hazards, voltage drop, service fits, code notes, circuit loading, circuit count, service size,
+  breaker type, circuit gauge.
+- **Home missions** run in the Home workspace (`useHomeLevelRunner`): hold times in house time, trips
+  count against "no trips" stars.
+- **Chapter 2 · Real Power** (`game/chapter2.ts`): Under Load (Predict), Long Life, Melted! (Fix), The
+  Long Run, Current Limit (Predict), Porch Light (Fix).
+- **Chapter 5 · Home Power** (`game/chapter5.ts`): Breakfast Rush, Shed Power, Hidden Hazard (Fix),
+  Kitchen to Code, Service Squeeze.
+- Test harness plays every bench mission (with patches, removals and predictions) and every Home mission
+  through the simulators; each must earn 3 stars and must not be solved by its starter.
+
+### Test status
+348 tests passing · typecheck clean · web build OK · Predict and Home missions completed end to end in headless Chromium (desktop + phone).
+
+### Next
+H2 — time & energy, then curriculum batch 2 (Chapters 3 and 4).
+
+---
+
 ## Plan update — curriculum build-out, alternating with Phase H
 **Date:** October 20, 2026
 

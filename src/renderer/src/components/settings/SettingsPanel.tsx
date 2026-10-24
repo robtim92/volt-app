@@ -7,6 +7,7 @@
  */
 import { useState } from 'react'
 import { useSettingsStore, hasApiKey } from '@stores/settingsStore'
+import { useGameStore } from '@stores/gameStore'
 
 export default function SettingsPanel(): JSX.Element {
   const apiKey = useSettingsStore((s) => s.apiKey)
@@ -15,6 +16,8 @@ export default function SettingsPanel(): JSX.Element {
   const clearApiKey = useSettingsStore((s) => s.clearApiKey)
 
   const configured = hasApiKey({ apiKey })
+  const unlockAll = useGameStore((s) => s.unlockAll)
+  const setUnlockAll = useGameStore((s) => s.setUnlockAll)
   const [draft, setDraft] = useState('')
   const [reveal, setReveal] = useState(false)
   const [justSaved, setJustSaved] = useState(false)
@@ -38,6 +41,26 @@ export default function SettingsPanel(): JSX.Element {
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-8">
           Configure the AI assistant and other preferences.
         </p>
+
+        {/* Campaign */}
+        <section className="mb-10">
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-1">Campaign</h2>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={unlockAll}
+              onChange={(e) => setUnlockAll(e.target.checked)}
+              className="mt-1 h-4 w-4 accent-brand-yellow"
+              aria-label="Unlock every mission"
+            />
+            <span>
+              <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">Unlock every mission</span>
+              <span className="block text-sm text-gray-500 dark:text-gray-400">
+                Open all chapters and missions, ignoring stars and order. Handy for exploring or testing. Your stars and XP are kept.
+              </span>
+            </span>
+          </label>
+        </section>
 
         {/* AI assistant section */}
         <section className="mb-10">
